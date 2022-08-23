@@ -12,7 +12,12 @@
       return;
     }
 
-    const res = await window.PowerTools.get('/api/data/v9.0/solutions'); //view history: /api/data/v9.0/solutionhistories
+    const query = new URLSearchParams();
+    query.set(`$expand`, `publisherid`);
+    query.set(`$filter`, `(isvisible eq true)`);
+    query.set(`$orderby`, `createdon desc`);
+
+    const res = await window.PowerTools.get('/api/data/v9.0/solutions', query); //view history: /api/data/v9.0/solutionhistories
     const js = await res.asJson();
 
     solutions = (js as any).value.map((s) => {

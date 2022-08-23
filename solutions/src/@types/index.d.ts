@@ -13,6 +13,6 @@ declare interface Window {
 		isLoaded(): boolean;
 		onLoad(): Promise<void>;
 		addConnectionChangeListener(listener: (connectionName: string | undefined) => void): void;
-		get(url: string): Promise<IHttpResult>;
+		get(url: string, query?: URLSearchParams): Promise<IHttpResult>;
 	};
 }
