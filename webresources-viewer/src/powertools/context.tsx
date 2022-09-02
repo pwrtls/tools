@@ -4,6 +4,7 @@ import { Result } from 'antd';
 type PowerToolsContextType = {
     isLoaded: boolean;
     connectionName: string;
+    get?: typeof window.PowerTools.get;
 };
 
 export const PowerToolsContext = React.createContext<PowerToolsContextType>({ isLoaded: false, connectionName: '' });
@@ -54,7 +55,7 @@ export class PowerToolsContextProvider extends React.PureComponent<React.PropsWi
 
     render() {
         return (
-            <PowerToolsContext.Provider value={{ isLoaded: this.state.isLoaded, connectionName: this.state.connectionName }}>
+            <PowerToolsContext.Provider value={{ isLoaded: this.state.isLoaded, connectionName: this.state.connectionName, get: window.PowerTools?.get }}>
                 { this.state.invalidContext ? this.invalidContextResult : this.props.children }
             </PowerToolsContext.Provider>
         );
