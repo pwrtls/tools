@@ -7,7 +7,7 @@ import { WebResourcesView } from './views/WebResources';
 import './App.css';
 
 export const AppRouter: React.FC = () => (
-    <PowerToolsContextProvider>
+    <PowerToolsContextProvider showNoConnection>
         <BrowserRouter>
             <Routes>
                 <Route path="" element={<WebResourcesView />} />

@@ -1,6 +1,6 @@
 import React, { useContext, useEffect, useState } from 'react';
 import { Table } from 'antd';
-import { TablePaginationConfig } from 'antd';
+import { ColumnsType } from 'antd/lib/table';
 
 import { usePowerToolsApi } from 'powertools/apiHook';
 import { PowerToolsContext } from 'powertools/context';
@@ -8,15 +8,13 @@ import { PowerToolsContext } from 'powertools/context';
 import { IoDataResponse } from 'models/oDataResponse';
 import { IWebResource } from 'models/webresoures';
 
-import { ConnectionView } from './connection';
-import { ColumnsType } from 'antd/lib/table';
-
 export const WebResourcesView: React.FC = () => {
     const { connectionName } = useContext(PowerToolsContext);
     const { get, isLoaded } = usePowerToolsApi();
     const [ isLoading, setLoading ] = useState(false);
     const [ data, setData ] = useState<IWebResource[]>([]);
-    const [ pagination, setPagination ] = useState<TablePaginationConfig>({ pageSize: 10, current: 1 });
+    const [ paging, setPaging ] = useState({ pageSize: 10, page: 1 });
+    const [ totalCount, setTotalCount ] = useState(0);
 
     useEffect(() => {
         if (!get || !isLoaded || !connectionName) {
@@ -32,21 +30,19 @@ export const WebResourcesView: React.FC = () => {
             query.set(`$filter`, `(ishidden/Value eq false)`);
             query.set(`$orderby`, `displayname asc`);
             query.set('$count', 'true');
-            query.set(`$top`, `${ pagination.pageSize }`);
-            // query.set('$skip', `${ pagination.current * }`);
+            query.set(`$top`, `${ paging.pageSize }`);
 
             const results = await get('/api/data/v9.0/webresourceset', query);
-
-            console.log('results:', results);
-
             const data = await results.asJson<IoDataResponse<IWebResource>>();
 
             console.log('data:', data);
+
+            setTotalCount(data['@odata.count'] || 0);
             setData(data.value);
         };
 
         Promise.all([getWebresources()]).then(() => setLoading(false));
-    }, [get, isLoaded, connectionName, pagination]);
+    }, [get, isLoaded, connectionName, paging]);
 
     const columns: ColumnsType<IWebResource> = [
         { title: 'Name', dataIndex: 'name', key: 'name' },
@@ -55,23 +51,22 @@ export const WebResourcesView: React.FC = () => {
     ];
 
     return (
-        <React.Fragment>
-            <ConnectionView />
-            <Table
-                loading={!isLoaded || isLoading}
-                dataSource={data}
-                columns={columns}
-                pagination={{
-                    ...pagination,
-                    onChange: (page, pageSize) => {
-                        setPagination({
-                            ...pagination,
-                            current: page,
-                            pageSize,
-                        })
-                    },
-                }}
-            />
-        </React.Fragment>
+        <Table
+            loading={!isLoaded || isLoading}
+            dataSource={data}
+            columns={columns}
+            rowKey="webresourceid"
+            pagination={{
+                position: ['topRight'],
+                current: paging.page,
+                total: totalCount,
+                onShowSizeChange(page, pageSize) {
+                    setPaging({ page, pageSize });
+                },
+                onChange: (page, pageSize) => {
+                    setPaging({ page, pageSize });
+                },
+            }}
+        />
     );
 };

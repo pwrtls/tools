@@ -10,13 +10,17 @@ type PowerToolsContextType = {
 export const PowerToolsContext = React.createContext<PowerToolsContextType>({ isLoaded: false, connectionName: '' });
 PowerToolsContext.displayName = 'Power Tools Context';
 
+interface IPowerToolsContextProviderProps extends React.PropsWithChildren {
+    showNoConnection?: boolean;
+}
+
 interface IPowerToolsContextProviderState {
     invalidContext: boolean;
     isLoaded: boolean;
     connectionName: string;
 }
 
-export class PowerToolsContextProvider extends React.PureComponent<React.PropsWithChildren, IPowerToolsContextProviderState> {
+export class PowerToolsContextProvider extends React.PureComponent<IPowerToolsContextProviderProps, IPowerToolsContextProviderState> {
     state: Readonly<IPowerToolsContextProviderState> = {
         invalidContext: false,
         isLoaded: false,
@@ -54,10 +58,34 @@ export class PowerToolsContextProvider extends React.PureComponent<React.PropsWi
         );
     }
 
+    get noConnectionResult() {
+        return (
+            <div style={{ position: 'fixed', left: 0, top: 0, zIndex: 100, width: '100vw', height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                <Result
+                    status="404"
+                    title="No Connection Selected"
+                    subTitle="To continue using this tool, please select a connection! Thank you"
+                />
+            </div>
+        );
+    }
+
+    get content() {
+        if (this.state.invalidContext) {
+            return this.invalidContextResult;
+        }
+
+        if (!this.state.connectionName && this.props.showNoConnection) {
+            return this.noConnectionResult;
+        }
+
+        return this.props.children;
+    }
+
     render() {
         return (
             <PowerToolsContext.Provider value={{ isLoaded: this.state.isLoaded, connectionName: this.state.connectionName, get: window.PowerTools?.get }}>
-                { this.state.invalidContext ? this.invalidContextResult : this.props.children }
+                { this.content }
             </PowerToolsContext.Provider>
         );
     }
