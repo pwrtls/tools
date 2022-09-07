@@ -24,7 +24,6 @@ export class PowerToolsContextProvider extends React.PureComponent<React.PropsWi
     };
 
     componentDidMount() {
-        console.log('hello');
         if (typeof window.PowerTools === 'undefined') {
             this.setState({ invalidContext: true });
             return;
@@ -39,6 +38,7 @@ export class PowerToolsContextProvider extends React.PureComponent<React.PropsWi
     }
 
     connectionChangeCallback = (name: string | undefined) => {
+        console.log('connection changed:', name);
         this.setState({ connectionName: name || '' });
     }
 
