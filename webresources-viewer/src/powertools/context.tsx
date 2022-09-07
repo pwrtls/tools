@@ -24,6 +24,7 @@ export class PowerToolsContextProvider extends React.PureComponent<React.PropsWi
     };
 
     componentDidMount() {
+        console.log('hello');
         if (typeof window.PowerTools === 'undefined') {
             this.setState({ invalidContext: true });
             return;

@@ -8,7 +8,7 @@ import './App.css';
 
 export const AppRouter: React.FC = () => (
     <PowerToolsContextProvider>
-        <BrowserRouter basename="/tool/index.html">
+        <BrowserRouter>
             <Routes>
                 <Route path="" element={<WebResourcesView />} />
             </Routes>
