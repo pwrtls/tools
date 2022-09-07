@@ -30,9 +30,12 @@ export const WebResourcesView: React.FC = () => {
             query.set(`$filter`, `(ishidden/Value eq false)`);
             query.set(`$orderby`, `displayname asc`);
             query.set('$count', 'true');
-            query.set(`$top`, `${ paging.pageSize }`);
 
-            const results = await get('/api/data/v9.0/webresourceset', query);
+            const headers: IHeaders = {
+                Prefer: `odata.maxpagesize=${ paging.pageSize }, odata.include-annotations=OData.Community.Display.V1.FormattedValue`,
+            };
+
+            const results = await get('/api/data/v9.0/webresourceset', query, headers);
             const data = await results.asJson<IoDataResponse<IWebResource>>();
 
             console.log('data:', data);

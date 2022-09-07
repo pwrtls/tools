@@ -7,12 +7,16 @@ declare interface IHttpResult {
 	asJson<TResult>(): Promise<TResult>;
 }
 
+declare interface IHeaders {
+	[key: string]: string;
+}
+
 declare interface Window {
 	PowerTools: {
 		version: string;
 		isLoaded(): boolean;
 		onLoad(): Promise<void>;
 		addConnectionChangeListener(listener: (connectionName: string | undefined) => void): void;
-		get(url: string, query?: URLSearchParams): Promise<IHttpResult>;
+		get(url: string, query?: URLSearchParams, headers?: IHeaders): Promise<IHttpResult>;
 	};
 }
