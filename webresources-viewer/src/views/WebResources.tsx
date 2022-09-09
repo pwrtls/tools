@@ -1,5 +1,5 @@
 import React, { useContext, useEffect, useState } from 'react';
-import { Table } from 'antd';
+import { Button, Table } from 'antd';
 import { ColumnsType } from 'antd/lib/table';
 
 import { usePowerToolsApi } from 'powertools/apiHook';
@@ -13,8 +13,7 @@ export const WebResourcesView: React.FC = () => {
     const { get, isLoaded } = usePowerToolsApi();
     const [ isLoading, setLoading ] = useState(false);
     const [ data, setData ] = useState<IWebResource[]>([]);
-    const [ paging, setPaging ] = useState({ pageSize: 10, page: 1 });
-    const [ totalCount, setTotalCount ] = useState(0);
+    const [ nextLink, setNextLink ] = useState('');
 
     useEffect(() => {
         if (!get || !isLoaded || !connectionName) {
@@ -32,7 +31,7 @@ export const WebResourcesView: React.FC = () => {
             query.set('$count', 'true');
 
             const headers: IHeaders = {
-                Prefer: `odata.maxpagesize=${ paging.pageSize }, odata.include-annotations=OData.Community.Display.V1.FormattedValue`,
+                Prefer: `odata.maxpagesize=${ 25 }, odata.include-annotations=OData.Community.Display.V1.FormattedValue`,
             };
 
             const results = await get('/api/data/v9.0/webresourceset', query, headers);
@@ -40,36 +39,41 @@ export const WebResourcesView: React.FC = () => {
 
             console.log('data:', data);
 
-            setTotalCount(data['@odata.count'] || 0);
+            setNextLink(data['@odata.nextLink'] || '');
             setData(data.value);
         };
 
         Promise.all([getWebresources()]).then(() => setLoading(false));
-    }, [get, isLoaded, connectionName, paging]);
+    }, [get, isLoaded, connectionName]);
 
+    //TODO: https://ant.design/components/table/#components-table-demo-ajax
     const columns: ColumnsType<IWebResource> = [
         { title: 'Name', dataIndex: 'name', key: 'name' },
         { title: 'Description', dataIndex: 'description', key: 'description', render: (value: string) => value || '-' },
+        { title: 'Type', dataIndex: 'webresourcetype', key: 'webresourcetype', render: (value: number, record) => record['webresourcetype@OData.Community.Display.V1.FormattedValue'] },
         { title: 'Is Managed', dataIndex: 'ismanaged', key: 'isManaged', render: (value: boolean) => value ? 'Yes' : 'No' },
     ];
 
+    const footer = (data: readonly IWebResource[]) => {
+        if (!Array.isArray(data) || data.length === 0 || !nextLink) {
+            return null;
+        }
+
+        return (
+            <Button>Load more</Button>
+        );
+    };
+
     return (
-        <Table
-            loading={!isLoaded || isLoading}
-            dataSource={data}
-            columns={columns}
-            rowKey="webresourceid"
-            pagination={{
-                position: ['topRight'],
-                current: paging.page,
-                total: totalCount,
-                onShowSizeChange(page, pageSize) {
-                    setPaging({ page, pageSize });
-                },
-                onChange: (page, pageSize) => {
-                    setPaging({ page, pageSize });
-                },
-            }}
-        />
+        <React.Fragment>
+            <Table
+                loading={!isLoaded || isLoading}
+                dataSource={data}
+                columns={columns}
+                rowKey="webresourceid"
+                pagination={false}
+                footer={footer}
+            />
+        </React.Fragment>
     );
 };
