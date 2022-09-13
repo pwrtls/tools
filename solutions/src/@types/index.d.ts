@@ -5,6 +5,7 @@ declare interface IHttpResult {
 	content: string;
 
 	asJson<TResult>(): Promise<TResult>;
+    getSkipToken(): Promise<string>;
 }
 
 declare interface IHeaders {
