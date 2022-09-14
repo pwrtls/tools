@@ -2,6 +2,10 @@
   "name": "webresources-viewer",
   "version": "0.1.0",
   "private": true,
+  "devDependencies": {
+    "@types/lodash.debounce": "^4.0.7",
+    "@types/lodash.uniqby": "^4.7.7"
+  },
   "dependencies": {
     "@testing-library/jest-dom": "^5.14.1",
     "@testing-library/react": "^13.0.0",
@@ -11,6 +15,8 @@
     "@types/react": "^18.0.0",
     "@types/react-dom": "^18.0.0",
     "antd": "^4.22.8",
+    "lodash.debounce": "^4.0.8",
+    "lodash.uniqby": "^4.7.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.3.0",
