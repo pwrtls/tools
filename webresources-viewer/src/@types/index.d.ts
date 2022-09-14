@@ -19,5 +19,6 @@ declare interface Window {
 		onLoad(): Promise<void>;
 		addConnectionChangeListener(listener: (connectionName: string | undefined) => void): void;
 		get(url: string, query?: URLSearchParams, headers?: IHeaders): Promise<IHttpResult>;
+        download(data: string, fileName?: string, mimeType?: string): Promise<void>;
 	};
 }

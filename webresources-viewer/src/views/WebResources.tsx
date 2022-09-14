@@ -11,6 +11,7 @@ import { IoDataResponse } from 'models/oDataResponse';
 import { IWebResource, WebResourceType } from 'models/webresoures';
 
 import { SearchForm } from './SearchForm';
+import { DownloadButton } from './DownloadButton';
 
 interface IWebResourcesViewFilter {
     webresourcetype?: number[];
@@ -40,7 +41,9 @@ export const WebResourcesView: React.FC = () => {
         const filters = ['(ishidden/Value eq false)'];
 
         if (Array.isArray(filter.webresourcetype) && filter.webresourcetype.length !== 0) {
-            filter.webresourcetype.forEach((v) => filters.push(`(webresourcetype eq ${v})`));
+            const typeFilters = filter.webresourcetype.map((v) => `(webresourcetype eq ${v})`);
+
+            filters.push(typeFilters.length === 1 ? typeFilters[0] : `(${ typeFilters.join(' or ') })`);
         }
 
         if (filter.searchValue) {
@@ -62,6 +65,8 @@ export const WebResourcesView: React.FC = () => {
             query.set('$skiptoken', skipTokenValue);
         }
 
+        // query.forEach(function() { console.log(arguments) });
+
         const headers: IHeaders = {
             Prefer: `odata.maxpagesize=${25}, odata.include-annotations=OData.Community.Display.V1.FormattedValue`,
         };
@@ -70,11 +75,8 @@ export const WebResourcesView: React.FC = () => {
         const webresourcesResults = await results.asJson<IoDataResponse<IWebResource>>();
         const paginationToken = await results.getSkipToken();
 
-        console.log(webresourcesResults.value);
-
         setSkipToken(paginationToken);
         setData(skipTokenValue ? uniqueBy([...data, ...webresourcesResults.value], 'webresourceid') : webresourcesResults.value);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     };
 
     useEffect(() => {
@@ -89,13 +91,10 @@ export const WebResourcesView: React.FC = () => {
     //TODO: https://ant.design/components/table/#components-table-demo-ajax
     const columns: ColumnsType<IWebResource> = [
         {
-            title: 'Name', dataIndex: 'name', key: 'name', ellipsis: true, sorter: true, defaultSortOrder: 'ascend',
+            title: 'Name', dataIndex: 'name', key: 'name', sorter: true, defaultSortOrder: 'ascend',
         },
         {
-            title: 'Display Name', dataIndex: 'displayname', key: 'displayName', sorter: true
-        },
-        {
-            title: 'Description', dataIndex: 'description', key: 'description', ellipsis: true, sorter: true, render: (value: string) => value || '-'
+            title: 'Display Name', dataIndex: 'displayname', key: 'displayName', ellipsis: true, sorter: true
         },
         {
             title: 'Type', dataIndex: 'webresourcetype', key: 'webresourcetype',
@@ -110,11 +109,12 @@ export const WebResourcesView: React.FC = () => {
         {
             title: 'Created On', dataIndex: 'createdon', key: 'createdOn', sorter: true, render: (createdon: string) => new Date(createdon).toLocaleDateString()
         },
+        {
+            title: 'Download', key: 'download', render: (_, record) => <DownloadButton webresourceid={record.webresourceid} />,
+        },
     ];
 
     const onTableChange = (pagination: TablePaginationConfig, filters: Record<string, FilterValue | null>, sorter: SorterResult<IWebResource> | SorterResult<IWebResource>[], extra: TableCurrentDataSource<IWebResource>) => {
-        console.log('pagination', pagination, 'filters', filters, 'sorter', sorter, 'extra', extra);
-
         setSkipToken('');
         setLoading(true);
 
@@ -123,7 +123,7 @@ export const WebResourcesView: React.FC = () => {
         };
 
         if (filters.webresourcetype) {
-            filter.webresourcetype = filters.webresourcetype as Array<number>;
+            filterToSet.webresourcetype = filters.webresourcetype as Array<number>;
         }
 
         if (!Array.isArray(sorter) && sorter.field && sorter.order) {

@@ -17,7 +17,6 @@ export const SearchForm: React.FC<ISearchFormProps> = (props) => {
 
     const onChange = () => {
         const values: IFormValues = form.getFieldsValue(true);
-        console.log('values:', values);
 
         if (!values.value || !values.value.trim()) {
             return;
@@ -31,8 +30,6 @@ export const SearchForm: React.FC<ISearchFormProps> = (props) => {
                 filterValue = `(${ values.operator }(${ values.field }, '${ values.value }'))`;
                 break;
         }
-
-        console.log('filter value:', filterValue);
 
         if (typeof props.onChange !== 'function') {
             return;

@@ -1,4 +1,5 @@
 export interface IWebResource {
+    content?: string;
     componentstate: number;
     'componentstate@OData.Community.Display.V1.FormattedValue': string;
     createdon: string;

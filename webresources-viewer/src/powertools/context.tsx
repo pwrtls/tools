@@ -5,6 +5,7 @@ type PowerToolsContextType = {
     isLoaded: boolean;
     connectionName: string;
     get?: typeof window.PowerTools.get;
+    download?: typeof window.PowerTools.download;
 };
 
 export const PowerToolsContext = React.createContext<PowerToolsContextType>({ isLoaded: false, connectionName: '' });
@@ -42,7 +43,6 @@ export class PowerToolsContextProvider extends React.PureComponent<IPowerToolsCo
     }
 
     connectionChangeCallback = (name: string | undefined) => {
-        console.log('connection changed:', name);
         this.setState({ connectionName: name || '' });
     }
 
@@ -84,7 +84,7 @@ export class PowerToolsContextProvider extends React.PureComponent<IPowerToolsCo
 
     render() {
         return (
-            <PowerToolsContext.Provider value={{ isLoaded: this.state.isLoaded, connectionName: this.state.connectionName, get: window.PowerTools?.get }}>
+            <PowerToolsContext.Provider value={{ isLoaded: this.state.isLoaded, connectionName: this.state.connectionName, get: window.PowerTools?.get, download: window.PowerTools?.download }}>
                 { this.content }
             </PowerToolsContext.Provider>
         );
