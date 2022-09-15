@@ -10,7 +10,7 @@ export const AppRouter: React.FC = () => (
     <PowerToolsContextProvider showNoConnection>
         <BrowserRouter>
             <Routes>
-                <Route path="" element={<WebResourcesView />} />
+                <Route path="*" element={<WebResourcesView />} />
             </Routes>
         </BrowserRouter>
     </PowerToolsContextProvider>

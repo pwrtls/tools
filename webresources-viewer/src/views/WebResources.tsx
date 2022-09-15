@@ -26,7 +26,7 @@ interface IWebResourcesViewSorter {
 export const WebResourcesView: React.FC = () => {
     const { connectionName } = useContext(PowerToolsContext);
     const { get, isLoaded } = usePowerToolsApi();
-    const [isLoading, setLoading] = useState(false);
+    const [isLoading, setLoading] = useState(true);
     const [isLoadingMore, setLoadingMore] = useState(false);
     const [filter, setFilter] = useState<IWebResourcesViewFilter>({});
     const [sorter, setSorter] = useState<IWebResourcesViewSorter>({ property: 'name', order: 'asc' });
