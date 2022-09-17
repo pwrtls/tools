@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Table } from 'antd';
 
 import { usePowerToolsApi } from 'powertools/apiHook';
-import { solutionComponentColumns } from 'utils/columns';
+import { getSolutionComponentColumns } from 'utils/columns';
 
 import { IoDataResponse } from 'models/oDataResponse';
 import { ISolutionComponentSummary } from 'models/solutionComponentSummary';
@@ -22,7 +22,7 @@ export const ComponentsTable: React.FC<{ solutionId?: string }> = (props) => {
 
             const query = new URLSearchParams();
             query.set(`$filter`, `(msdyn_solutionid eq ${ props.solutionId })`);
-            query.set(`$orderby`, `msdyn_displayname asc`);
+            query.set(`$orderby`, `msdyn_name asc`);
 
             const res = await window.PowerTools.get('/api/data/v9.0/msdyn_solutioncomponentsummaries', query);
             const js = await res.asJson<IoDataResponse<ISolutionComponentSummary>>();
@@ -41,7 +41,7 @@ export const ComponentsTable: React.FC<{ solutionId?: string }> = (props) => {
     return (
         <Table<ISolutionComponentSummary>
             loading={isLoadingComponents}
-            columns={solutionComponentColumns}
+            columns={getSolutionComponentColumns(props.solutionId)}
             dataSource={components}
             rowKey="msdyn_objectid"
             pagination={{

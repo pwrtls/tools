@@ -29,7 +29,6 @@ export const HistoryTable: React.FC<{ solutionId?: string }> = (props) => {
             const res = await window.PowerTools.get('/api/data/v9.0/solutionhistories', query, headers);
             const js = await res.asJson<IoDataResponse>();
 
-            console.log(js);
             setHistories(js.value);
         };
 

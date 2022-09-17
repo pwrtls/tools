@@ -1,10 +1,10 @@
-import { ColumnsType } from 'antd/lib/table';
 import moment from 'moment';
+import { ColumnsType } from 'antd/lib/table';
 
 import { ISolution } from 'models/solutions';
 import { ISolutionComponentSummary } from 'models/solutionComponentSummary';
 
-import { ViewSolutionDetailsButton } from './buttons';
+import { SolutionComponentActionButton, ViewSolutionDetailsButton } from './buttons';
 import { SolutionInfo } from './info';
 
 export const solutionsColumns: ColumnsType<ISolution> = [
@@ -28,13 +28,19 @@ export const solutionsColumns: ColumnsType<ISolution> = [
     },
 ];
 
-export const solutionComponentColumns: ColumnsType<ISolutionComponentSummary> = [
-    { title: 'Display Name', dataIndex: 'msdyn_displayname', key: 'displayName', ellipsis: true },
-    { title: 'Name', dataIndex: 'msdyn_name', key: 'name', ellipsis: true },
-    { title: 'Type', dataIndex: 'msdyn_componentlogicalname', key: 'type' },
-    { title: 'Managed', dataIndex: 'msdyn_ismanaged', key: 'managed', render: (value: boolean) => value ? 'Yes' : 'No' },
-    { title: 'Modified', dataIndex: 'msdyn_modifiedon', key: 'modified', render: (value: string) => moment(value).fromNow() },
-];
+export const getSolutionComponentColumns = (solutionId?: string) => {
+    const solutionComponentColumns: ColumnsType<ISolutionComponentSummary> = [
+        { title: 'Display Name', dataIndex: 'msdyn_displayname', key: 'displayName', ellipsis: true, render: (value?: string) => value || '-' },
+        { title: 'Name', dataIndex: 'msdyn_name', key: 'name', ellipsis: true, render: (value?: string) => value || '-' },
+        { title: 'Type', dataIndex: 'msdyn_componentlogicalname', key: 'type' },
+        { title: 'Managed', dataIndex: 'msdyn_ismanaged', key: 'managed', render: (value: boolean) => value ? 'Yes' : 'No' },
+        { title: 'Modified', dataIndex: 'msdyn_modifiedon', key: 'modified', render: (value?: string) => value ? moment(value).fromNow() : '-' },
+        { title: 'Actions', key: 'actions', render: (v, record) => <SolutionComponentActionButton solutionId={solutionId} componentId={record.msdyn_objectid} componentType={record.msdyn_componenttype} /> },
+    ];
+
+    return solutionComponentColumns;
+}
+
 
 export const solutionHistoryColumns: ColumnsType<any> = [
     { title: 'Start', dataIndex: 'starttime', key: 'startTime', render: (value: string) => new Date(value).toLocaleString() },

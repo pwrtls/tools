@@ -25,7 +25,7 @@ export const SolutionsView: React.FC = () => {
             query.set(`$filter`, `(isvisible eq true)`);
             query.set(`$orderby`, `modifiedon desc`);
 
-            const res = await window.PowerTools.get('/api/data/v9.0/solutions', query); //view history: /api/data/v9.0/solutionhistories
+            const res = await window.PowerTools.get('/api/data/v9.0/solutions', query);
             const js = await res.asJson<IoDataResponse<ISolution>>();
 
             setSolutions(js.value);
