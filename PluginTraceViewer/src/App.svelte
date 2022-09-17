@@ -14,31 +14,34 @@
 
   let loaded = false;
   let tracelogs = [];
+  let connection = '';
 
   let open = false;
   //TODO: This should become a type - declared here for the dialog not to error out
   let selectedTrace = {
-        id: 0,
+      id: 0,
 
-        correlationid:0,
-        pluginstepid: 0,
-        plugintracelogid: 0,
-        organizationid: 0,
-        requestid: 0,
-        issystemcreated: false,
-        exceptiondetails: '',
-        typename: '',
-        messagename: '',
-        messageblock: '',
-        primaryentity: '',
+      correlationid:0,
+      pluginstepid: 0,
+      plugintracelogid: 0,
+      organizationid: 0,
+      requestid: 0,
+      issystemcreated: false,
+      exceptiondetails: '',
+      typename: '',
+      messagename: '',
+      messageblock: '',
+      primaryentity: '',
 
-        performanceconstructorduration: 0,
-        performanceconstructorstarttime: 0,
-        performanceexecutionduration: 0,
-        performanceexecutionstarttime: 0,
+      performanceconstructorduration: 0,
+      performanceconstructorstarttime: 0,
+      performanceexecutionduration: 0,
+      performanceexecutionstarttime: 0,
 
-        createdOn: new Date(),
-      };
+      createdOn: new Date(),
+    };
+
+    let assemblySearch = '';
 
   async function onConnectionChange(connectionName: string | undefined) {
     if (!connectionName) {
@@ -47,9 +50,17 @@
       return;
     }
 
+    connection = connectionName;
+
+    await loadPluginTraceLogs();
+  }
+
+  async function loadPluginTraceLogs() {
+    loaded = false;
+
     const query = new URLSearchParams();
     //query.set(`$expand`, `publisherid`);
-    //query.set(`$filter`, `(isvisible eq true)`);
+    query.set(`$filter`, `startswith(typename,'${assemblySearch}')`);
     //query.set(`$orderby`, `createdon desc`);
 
     const res = await window.PowerTools.get('/api/data/v9.0/plugintracelogs', query); //view history: /api/data/v9.0/solutionhistories
@@ -111,42 +122,73 @@
 </script>
 
 <main>
-  <DataTable table$aria-label="User list" style="width: 100%;">
-    <Head>
-      <Row>
-        <Cell>Entity</Cell>
-        <Cell>TypeName</Cell>
-        <Cell>Exception Details</Cell>
-        <Cell>Message Block</Cell>
-        <Cell>Created On</Cell>
-        <Cell></Cell>
-      </Row>
-    </Head>
-    <Body>
-      {#each tracelogs as log (log.correlationid)}
-        <Row>
-          <Cell>{log.primaryentity}</Cell>
-          <Cell>{trim(log.typename, 10)}</Cell>
-          <Cell>{trim(log.exceptiondetails, 30)}</Cell>
-          <Cell>{trim(log.messageblock, 10)}</Cell>
-          <Cell>{log.createdOn}</Cell>
-          <Cell>
-            <Button on:click={() => detailClickHandler(log)}>
-              <Label>Details</Label>
-            </Button>
-        </Cell>
-        </Row>
-      {/each}
-    </Body>
-   
-    <LinearProgress
-      indeterminate
-      bind:closed={loaded}
-      aria-label="Solutions are being loaded..."
-      slot="progress"
-    />
-  </DataTable>
-
+        
+      <DataTable table$aria-label="User list" style="width: 100%;">
+        <Head>
+          <Row>
+            <Cell style="width:100%">
+              <Textfield
+                type="text"
+                bind:value={assemblySearch}
+                label="Search Type Name"
+                style="width: 100%"
+              >
+              </Textfield>
+            </Cell>
+            <Cell>
+              <Button on:click={loadPluginTraceLogs} variant="raised">
+                <Label>Search</Label>
+              </Button>
+            </Cell>
+          </Row>
+          <Row>
+            <Cell>Entity</Cell>
+            <Cell>TypeName</Cell>
+            <Cell>Exception Details</Cell>
+            <Cell>Message Block</Cell>
+            <Cell>Created On</Cell>
+            <Cell></Cell>
+          </Row>
+        </Head>
+        <Body>
+          {#each tracelogs as log (log.correlationid)}
+            <Row>
+              <Cell>{log.primaryentity}</Cell>
+              <Cell>{trim(log.typename, 10)}</Cell>
+              <Cell>{trim(log.exceptiondetails, 30)}</Cell>
+              <Cell>{trim(log.messageblock, 10)}</Cell>
+              <Cell>{log.createdOn}</Cell>
+              <Cell>
+                <Button on:click={() => detailClickHandler(log)}>
+                  <Label>Details</Label>
+                </Button>
+            </Cell>
+            </Row>
+          {/each}
+          {#if !loaded}
+          <Row>
+            <Cell style="width:100%">
+              Loading..
+            </Cell>
+          </Row>
+          {/if}
+          {#if loaded && tracelogs.length == 0}
+          <Row>
+            <Cell style="width:100%">
+              No Results found
+            </Cell>
+          </Row>
+          {/if}
+        </Body>
+       
+        <LinearProgress
+          indeterminate
+          bind:closed={loaded}
+          aria-label="Solutions are being loaded..."
+          slot="progress"
+        />
+      </DataTable>
+  
   <Dialog
   bind:open
   fullscreen
