@@ -28,7 +28,6 @@ export const SolutionsView: React.FC = () => {
             const res = await window.PowerTools.get('/api/data/v9.0/solutions', query); //view history: /api/data/v9.0/solutionhistories
             const js = await res.asJson<IoDataResponse<ISolution>>();
 
-            console.log(js.value);
             setSolutions(js.value);
         }
 

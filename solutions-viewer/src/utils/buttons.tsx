@@ -1,6 +1,6 @@
 import React from 'react';
-import { Button } from 'antd';
 import { useNavigate } from 'react-router-dom';
+import { Button } from 'antd';
 
 export const ViewSolutionDetailsButton: React.FC<{ solutionId: string }> = (props) => {
     const navigate = useNavigate();

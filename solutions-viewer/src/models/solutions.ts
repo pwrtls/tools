@@ -6,6 +6,8 @@ export interface ISolution {
     modifiedon: string;
     ismanaged: boolean;
 
+    installedon: string;
+
     publisherid: IPublisher;
 }
 
