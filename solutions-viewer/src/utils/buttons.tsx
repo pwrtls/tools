@@ -41,7 +41,7 @@ export const SolutionComponentActionButton: React.FC<ISolutionComponentActionBut
         menuItems.push({ key: 'download-wr', label: 'Download File', icon: <FileOutlined /> });
 
         if (props.isCustomizable) {
-            menuItems.push({ key: 'upload-wr', label: 'Upload & Publish', icon: <UploadOutlined /> });
+            menuItems.push({ key: 'upload-wr', label: 'Upload & Publish', icon: <UploadOutlined />, disabled: true });
         }
     }
 
