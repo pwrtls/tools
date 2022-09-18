@@ -34,8 +34,18 @@ export const getSolutionComponentColumns = (solutionId?: string) => {
         { title: 'Name', dataIndex: 'msdyn_name', key: 'name', ellipsis: true, render: (value?: string) => value || '-' },
         { title: 'Type', dataIndex: 'msdyn_componentlogicalname', key: 'type' },
         { title: 'Managed', dataIndex: 'msdyn_ismanaged', key: 'managed', render: (value: boolean) => value ? 'Yes' : 'No' },
+        { title: 'Customizable', dataIndex: 'msdyn_iscustomizable', key: 'customize', render: (value: boolean) => value ? 'Yes' : 'No' },
         { title: 'Modified', dataIndex: 'msdyn_modifiedon', key: 'modified', render: (value?: string) => value ? moment(value).fromNow() : '-' },
-        { title: 'Actions', key: 'actions', render: (v, record) => <SolutionComponentActionButton solutionId={solutionId} componentId={record.msdyn_objectid} componentType={record.msdyn_componenttype} /> },
+        {
+            title: 'Actions', key: 'actions',
+            render: (v, record) =>
+                <SolutionComponentActionButton
+                    solutionId={solutionId}
+                    componentId={record.msdyn_objectid}
+                    componentType={record.msdyn_componenttype}
+                    isCustomizable={record.msdyn_iscustomizable || false}
+                />,
+        },
     ];
 
     return solutionComponentColumns;
