@@ -41,9 +41,7 @@ export const getSolutionComponentColumns = (solutionId?: string) => {
             render: (v, record) =>
                 <SolutionComponentActionButton
                     solutionId={solutionId}
-                    componentId={record.msdyn_objectid}
-                    componentType={record.msdyn_componenttype}
-                    isCustomizable={record.msdyn_iscustomizable || false}
+                    component={record}
                 />,
         },
     ];

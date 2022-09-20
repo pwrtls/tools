@@ -15,6 +15,10 @@ export const ComponentsTable: React.FC<{ solutionId?: string }> = (props) => {
     const [ components, setComponents ] = useState<ISolutionComponentSummary[]>([]);
 
     const loadSolutionComponents = async (skipTokenValue?: string) => {
+        if (!get) {
+            return;
+        }
+
         const query = new URLSearchParams();
         query.set(`$filter`, `(msdyn_solutionid eq ${ props.solutionId })`);
         query.set(`$orderby`, `msdyn_name asc`);
@@ -23,7 +27,7 @@ export const ComponentsTable: React.FC<{ solutionId?: string }> = (props) => {
             query.set('$skiptoken', skipTokenValue);
         }
 
-        const res = await window.PowerTools.get('/api/data/v9.0/msdyn_solutioncomponentsummaries', query);
+        const res = await get('/api/data/v9.0/msdyn_solutioncomponentsummaries', query);
         const js = await res.asJson<IoDataResponse<ISolutionComponentSummary>>();
 
         if (!js || !Array.isArray(js.value)) {
