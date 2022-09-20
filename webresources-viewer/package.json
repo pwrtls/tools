@@ -4,7 +4,8 @@
   "private": true,
   "devDependencies": {
     "@types/lodash.debounce": "^4.0.7",
-    "@types/lodash.uniqby": "^4.7.7"
+    "@types/lodash.uniqby": "^4.7.7",
+    "cross-env": "^7.0.3"
   },
   "dependencies": {
     "@testing-library/jest-dom": "^5.14.1",
@@ -25,7 +26,7 @@
     "web-vitals": "^2.1.0"
   },
   "scripts": {
-    "start": "PORT=4101 react-scripts start",
+    "start": "cross-env PORT=4101 react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject"

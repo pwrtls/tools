@@ -88,7 +88,6 @@ export const WebResourcesView: React.FC = () => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [get, isLoaded, connectionName, filter, sorter]);
 
-    //TODO: https://ant.design/components/table/#components-table-demo-ajax
     const columns: ColumnsType<IWebResource> = [
         {
             title: 'Name', dataIndex: 'name', key: 'name', sorter: true, defaultSortOrder: 'ascend',

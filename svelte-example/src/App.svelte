@@ -1,6 +1,6 @@
 <script lang="ts">
-  import DataTable, { Head, Body, Row, Cell } from '@smui/data-table';
-  import LinearProgress from '@smui/linear-progress';
+  import DataTable, { Head, Body, Row, Cell } from "@smui/data-table";
+  import LinearProgress from "@smui/linear-progress";
 
   let loaded = false;
   let solutions = [];
@@ -13,20 +13,21 @@
     }
 
     const query = new URLSearchParams();
+    query.set(`$select`, `friendlyname,uniquename,description,createdon`);
     query.set(`$expand`, `publisherid`);
     query.set(`$filter`, `(isvisible eq true)`);
     query.set(`$orderby`, `createdon desc`);
 
-    const res = await window.PowerTools.get('/api/data/v9.0/solutions', query); //view history: /api/data/v9.0/solutionhistories
+    const res = await window.PowerTools.get("/api/data/v9.0/solutions", query); //view history: /api/data/v9.0/solutionhistories
     const js = await res.asJson();
 
     solutions = (js as any).value.map((s) => {
-      const desc = s.description || '';
+      const desc = s.description || "";
 
       return {
         id: s.solutionid,
         name: s.friendlyname,
-        description: `${ desc.substring(0, 100) }${ desc.length > 100 ? '...' : '' }`,
+        description: `${desc.substring(0, 100)}${desc.length > 100 ? "..." : ""}`,
         createdOn: s.createdon,
         uniqueName: s.uniquename,
       };
@@ -38,7 +39,7 @@
   window.PowerTools.addConnectionChangeListener(onConnectionChange);
 
   window.PowerTools.onLoad().then(async () => {
-    console.log('Svelte app loaded');
+    console.log("Svelte app loaded");
   });
 </script>
 
@@ -62,7 +63,7 @@
         </Row>
       {/each}
     </Body>
-   
+
     <LinearProgress
       indeterminate
       bind:closed={loaded}
