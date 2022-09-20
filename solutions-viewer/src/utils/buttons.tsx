@@ -8,6 +8,7 @@ import { ISolutionComponentSummary, SolutionComponentType } from 'models/solutio
 
 import { downloadWebResource } from 'api/webResources';
 import { getEntityDefinitionAsTypeScript } from 'api/entityDefinitions';
+import { downloadPluginAssembly } from 'api/pluginAssembly';
 
 export const ViewSolutionDetailsButton: React.FC<{ solutionId: string }> = (props) => {
     const navigate = useNavigate();
@@ -41,6 +42,10 @@ export const SolutionComponentActionButton: React.FC<ISolutionComponentActionBut
         }
     }
 
+    if (props.component.msdyn_componenttype === SolutionComponentType.PluginAssembly) {
+        menuItems.push({ key: 'download-pl-assembly', label: 'Download Assembly', icon: <FileOutlined /> });
+    }
+
     const onMenuClick: MenuProps['onClick'] = async (e) => {
         console.log(e, props);
 
@@ -51,6 +56,9 @@ export const SolutionComponentActionButton: React.FC<ISolutionComponentActionBut
                 return;
             case 'download-wr':
                 downloadWebResource(props.component.msdyn_objectid);
+                return;
+            case 'download-pl-assembly':
+                downloadPluginAssembly(props.component.msdyn_objectid);
                 return;
         }
     };
