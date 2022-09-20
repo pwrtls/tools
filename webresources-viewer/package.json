@@ -1,7 +1,12 @@
 {
   "name": "webresources-viewer",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
+  "devDependencies": {
+    "@types/lodash.debounce": "^4.0.7",
+    "@types/lodash.uniqby": "^4.7.7",
+    "cross-env": "^7.0.3"
+  },
   "dependencies": {
     "@testing-library/jest-dom": "^5.14.1",
     "@testing-library/react": "^13.0.0",
@@ -11,6 +16,8 @@
     "@types/react": "^18.0.0",
     "@types/react-dom": "^18.0.0",
     "antd": "^4.22.8",
+    "lodash.debounce": "^4.0.8",
+    "lodash.uniqby": "^4.7.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.3.0",
@@ -19,7 +26,7 @@
     "web-vitals": "^2.1.0"
   },
   "scripts": {
-    "start": "PORT=4101 react-scripts start",
+    "start": "cross-env PORT=4101 react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
