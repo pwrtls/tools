@@ -11,13 +11,14 @@
         "typescript": "^4.4.2"
     },
     "dependencies": {
+        "@ant-design/icons": "^4.7.0",
         "antd": "^4.23.1",
         "react": "^18.2.0",
         "react-dom": "^18.2.0",
         "react-router-dom": "^6.4.0"
     },
     "scripts": {
-        "start": "PORT=3101 react-scripts start",
+        "start": "PORT=3121 react-scripts start",
         "build": "react-scripts build"
     },
     "eslintConfig": {
