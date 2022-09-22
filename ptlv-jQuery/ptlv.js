@@ -91,46 +91,19 @@ function RetrieveLogs() {
     window.PowerTools.get('/api/data/v9.0/plugintracelogs', query, headers)
         .then((res) => jsData = res.asJson())
         .then((jsonData) => {
-            console.log(jsonData);
-            BuildTableFromJson(jsonData);
-        })
+            BuildTableFromJson(jsonData.value);
+        });
 }
-function BuildTableFromJson(jsonData){
-    var cols = Headers(jsonData, $("#resTable")); 
+function BuildTableFromJson(traceArray) {
+    traceArray.forEach((trace) => {
+        console.log('trace is:', trace);
 
-    for (var i = 0; i < jsonData.length; i++) {
-        var row = $('<tr/>');  
-        for (var colIndex = 0; colIndex < cols.length; colIndex++)
-        {
-            var val = jsonData[i][cols[colIndex]];
-            if (val == null) val = ""; 
-                row.append($('<td/>').html(val));
-         }
-         $("#resTable").append(row);
-     }
+        var row = $('<tr>');
+        row.append('<td>').text(trace.typename);
+
+        $("#resTable").append(row);
+    });
 }
-
-function Headers(list, selector) {
-    var columns = [];
-    var header = $('<tr/>');
-     
-    for (var i = 0; i < list.length; i++) {
-        var row = list[i];
-         
-        for (var c in row) {
-            if ($.inArray(c, columns) == -1) {
-                columns.push(c);
-                 
-                // Creating the header
-                header.append($('<th/>').html(c));
-            }
-        }
-    }
-     
-    // Appending the header to the table
-    $(selector).append(header);
-        return columns;
-}      
 
 function onPageLoad() {
     console.log(window.PowerTools.version);
