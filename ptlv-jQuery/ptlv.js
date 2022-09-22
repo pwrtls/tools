@@ -38,7 +38,6 @@ function ParseJson(items){
         if (!lookup.entity.includes(item.primaryentity)) {
             lookup.entity.push(item.primaryentity);
         }
-        
     });
 
     lookup.entity.forEach((v) => {
@@ -73,16 +72,18 @@ function RetrieveLogs() {
     query.set('$top', numRows);
 
     const filters = [];
-    if (plugin != null) {
+    if (plugin != "") {
         filters.push('(typename eq \'' + plugin + '\')');
     }
-    if (message != null) {
+    if (message != "") {
         filters.push('(messagename eq \'' + message + '\')');
     }
-    if (entity != null) {
+    if (entity != "") {
         filters.push('(primaryentity eq \'' + entity + '\')');
     }
-    query.set('$filter', filters.join(' and '));
+    if (filters.length != 0){
+        query.set('$filter', filters.join(' and '));
+    }
 
     const headers = {
         Prefer: 'odata.include-annotations=OData.Community.Display.V1.FormattedValue',
@@ -98,11 +99,46 @@ function BuildTableFromJson(traceArray) {
     traceArray.forEach((trace) => {
         console.log('trace is:', trace);
 
+        const pluginNameArray = trace.typename.split(',');
+        let pluginName = pluginNameArray[0];
+        
         var row = $('<tr>');
-        row.append('<td>').text(trace.typename);
+        row.append('<td>'+trace.correlationid+'</td>'+
+        '<td>'+trace.performanceexecutionstarttime+'</td>'+
+        '<td>'+trace.performanceexecutionduration+'</td>'+
+        '<td>'+GetLabel(trace.operationtype, "operation")+'</td>'+
+        '<td>'+pluginName+'</td>'+
+        '<td>'+trace.depth+'</td>'+
+        '<td>'+GetLabel(trace.mode, "mode")+'</td>'+
+        '<td>'+trace.messageblock+'</td>'+
+        '<td>'+''+'</td>'+
+        '<td>'+trace.messagename+'</td>'+
+        '<td>'+trace.primaryentity+'</td>');
 
         $("#resTable").append(row);
+        
     });
+}
+
+function GetLabel(obj, prop){
+    if(prop == "mode"){
+        switch(obj){
+            case 0: 
+                return "Synchronous";
+            case 1:
+                return"Asynchronous";
+        }
+    }
+    if(prop == "operation"){
+        switch(obj){
+            case 0:
+                return "Unknown";
+            case 1:
+                return "Plug-In";
+            case 2:
+                return "Workflow Activity";
+        }
+    }
 }
 
 function onPageLoad() {

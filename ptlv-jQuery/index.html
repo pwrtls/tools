@@ -20,12 +20,15 @@
     
     <p><label for="plugin">Choose a plugin:</label></p>
     <select id="plugin" name="plugin">
+        <option></option>
     </select>
     <p><label for="message">Choose a message:</label></p>
     <select id="message" name="message">
+        <option></option>
     </select>
     <p><label for="entity">Choose an entity:</label></p>
     <select id="entity" name="entity">
+        <option></option>
     </select>
     <p><label for="Number of rows">Number of Rows</label></p>
     <select id="NumberOfRows" name="NumberOfRows">
@@ -42,12 +45,17 @@
     <h3>Plug-in Trace Logs</h3>
     <div id="results-container">
         <table align="center" id="resTable" border="1">
-            <tr>
-                <th>Plugin</th>
-                <th>Entity</th>
-                <th>Message</th>
-                <th>Message Block</th>
-            </tr>
+                <th id="Correlationid">Correlationid</th>
+                <th id="Start Time">Start Time</th>
+                <th id="Duration">Duration</th>
+                <th id="Operation">Operation</th>
+                <th id="Plugin">Plugin</th>
+                <th id="Depth">Depth</th>
+                <th id="Mode">Mode</th>
+                <th id="Message Block">Message Block</th>
+                <th id="Stage">Stage</th>
+                <th id="Message">Message</th>
+                <th id="Entity">Entity</th>
         </table>
     </div>
     
