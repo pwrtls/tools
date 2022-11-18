@@ -33,19 +33,28 @@ addFilter = function(){
 };
 
 selectedFilterColumns = function(){
-    
-    var selAttributeCtrl = $('#selectAttributeEntityLstFilter'),
-        selectOperatorCtrl = $("#selectOperator"),
+    debugger;
+
+    var selAttributeCtrl = $('#selectAttributeEntityLstFilter option:selected'),
+        selectOperatorCtrl = $("#selectOperator option:selected"),
         inputTextValueCtrl = $("#filterValue"),
         inputTextValueCtrlValue = inputTextValueCtrl ? inputTextValueCtrl.val() :"",
         selectOperatorValue = selectOperatorCtrl ? selectOperatorCtrl.val() : "",
         selectedValues = selAttributeCtrl ? selAttributeCtrl.val() : "*",
-        properitesArray = new Object();
+        columnfilterValue = selectOperatorCtrl ? selectOperatorCtrl.attr("columnFilter") == 'false' ? false : true : true,
+        columntypeValue = selectOperatorCtrl ? selectOperatorCtrl.attr("type") : "string",
+        attributeType = selAttributeCtrl && selAttributeCtrl.attr("attributeType") ? selAttributeCtrl.attr("attributeType") : "",
+        properitesArray = new Object(),
+        pckLstCtrl = $("#pckLst"),
+        pckLstValue = pckLstCtrl ? pckLstCtrl.val() : "";
 
         properitesArray.value = selectedValues;
         properitesArray.operator = selectOperatorValue;
-        properitesArray.operatorValue = inputTextValueCtrlValue;
-
+        properitesArray.columnfilter = columnfilterValue;
+        properitesArray.columntype = columntypeValue;
+        properitesArray.operatorValue = inputTextValueCtrlValue ? inputTextValueCtrlValue : pckLstValue;
+        properitesArray.attributeType = attributeType;
+        
         selectedFilterAttributeEntities.push(properitesArray);
 
         console.log("selectedFilterAttributeEntities - " + selectedFilterAttributeEntities);
@@ -69,6 +78,80 @@ clearFetch = function()
     }
 };
 
+changeAttributeFilter = function()
+{
+    debugger;
+    var selAttributeCtrl = $('#selectAttributeEntityLstFilter option:selected'),
+    attributeType = selAttributeCtrl && selAttributeCtrl.attr("attributeType") ? selAttributeCtrl.attr("attributeType") : "",
+    lkupGuidMsgCtrl = $("#lkupGuidMsg"),
+    filterValueCtrl = $("#filterValue"),
+    pckLstCtrl= $("#pckLst");
+
+    if(!lkupGuidMsgCtrl)
+    {
+        return;
+    }
+    
+    lkupGuidMsgCtrl.hide();
+    filterValueCtrl.hide();
+    pckLstCtrl.hide();
+
+    if(attributeType == "Lookup")
+    {
+        //Remove options from operator dropdown
+        lkupGuidMsgCtrl.show();
+        filterValueCtrl.show();
+    }
+    else if(attributeType == "Picklist")
+    {
+        
+        pckLstCtrl.show();
+        //Remove options from operator dropdown
+        window.PowerTools.get("/api/data/v9.0/EntityDefinitions(LogicalName='" + selectedEntity + "')/Attributes(LogicalName='" + selAttributeCtrl.val() +"')/Microsoft.Dynamics.CRM.PicklistAttributeMetadata?$select=LogicalName&$expand=OptionSet($select=Options),GlobalOptionSet($select=Options)")
+        .then((res) => res.asJson())
+        .then((result) => {
+            debugger;
+            
+            pckLstCtrl.empty();
+
+            result.GlobalOptionSet.Options.forEach((solution) => {
+                pckLstCtrl.append('<option value='+ solution.Value +'>' + solution.Label.LocalizedLabels[0].Label + '</option>');
+            });
+        });
+    }
+    else{
+        // Add options back to dropdown
+        filterValueCtrl.show();
+    }
+
+};
+
+hideShowfields = function(){
+    debugger;
+    var selectOperatorCtrl = $("#selectOperator option:selected"),
+    selectOperatorValue = selectOperatorCtrl ? $("#selectOperator").val() : "",
+    selectOperatorColumnfilter = selectOperatorCtrl ? $(selectOperatorCtrl).attr("columnfilter") : true,
+    inputTextValueCtrl = $("#filterValue"),
+    filterValueLabelCtrl =$("#filterValueLabel");
+
+    if(!filterValueLabelCtrl || !filterValueLabelCtrl)
+    {
+        return;
+    }
+
+    if(selectOperatorColumnfilter == "false")
+    {
+        inputTextValueCtrl.val("");
+        inputTextValueCtrl.hide();
+        filterValueLabelCtrl.hide();
+    }
+    else{
+        inputTextValueCtrl.show();
+        filterValueLabelCtrl.show();
+    }
+
+};
+
 executeFetchXMLConvertor = function(){
 
      fetchBuilder= "<fetch version=\"1.0\" output-format=\"xml-platform\" mapping=\"logical\" distinct=\"false\">";
@@ -89,7 +172,14 @@ executeFetchXMLConvertor = function(){
     {
         filterFetchXML ="\n<filter>";
         (selectedFilterAttributeEntities || []).map(function(item){
-            filterFetchXML+="\n    <condition attribute='"+item.value+"' operator='"+item.operator+"'>\n     <value>"+item.operatorValue+"</value>\n    </condition>";
+            debugger;
+            if(item.columnfilter == true)
+            {
+                filterFetchXML+="\n    <condition attribute='"+item.value+"' operator='"+item.operator+"'>\n     <value>"+item.operatorValue+"</value>\n    </condition>";
+            }
+            else{
+                filterFetchXML+="\n    <condition attribute='"+item.value+"' operator='"+item.operator+"' />";
+            }
         });
         filterFetchXML +="\n</filter>";
     }
@@ -236,6 +326,8 @@ createTreeOnEntitySelection =function(){
 
 queryBuilderTree = function(){
 
+    debugger;
+    
     if(!selectedEntity)
     {
         return;
@@ -304,7 +396,7 @@ selectAttributeEntity = function(){
     window.PowerTools.get("/api/data/v9.0/EntityDefinitions(LogicalName='" + selEntityValue + "')/Attributes")
         .then((res) => res.asJson())
         .then((result) => {
-            
+            debugger;
             $('#results').empty();
 
             if (!result || !Array.isArray(result.value)) {
@@ -318,8 +410,8 @@ selectAttributeEntity = function(){
             }
 
             result.value.forEach((solution) => {
-                selAttributeCtrl.append('<option value=' + solution.LogicalName + '>' + solution.LogicalName + '</option>');
-                selAttributeFilterCtrl.append('<option value=' + solution.LogicalName + '>' + solution.LogicalName + '</option>');
+                selAttributeCtrl.append('<option value=' + solution.LogicalName + ' attributeType=' + solution.AttributeType +' >' + solution.LogicalName + '</option>');
+                selAttributeFilterCtrl.append('<option value=' + solution.LogicalName + ' attributeType=' + solution.AttributeType +'>' + solution.LogicalName + '</option>');
             });
         });
 };

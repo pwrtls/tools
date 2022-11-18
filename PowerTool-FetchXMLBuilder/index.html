@@ -11,11 +11,11 @@
     <link rel="stylesheet" href="themes/default/style.min.css">
     <link rel="stylesheet" href="themes/default-dark/style.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jquery-confirm/3.3.2/jquery-confirm.min.css">
-    <link rel="stylesheet" href="/themes/custom.css"/>
+    <link rel="stylesheet" href="themes/custom.css"/>
     <script src="https://code.jquery.com/jquery-3.6.1.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery-confirm/3.3.2/jquery-confirm.min.js"></script>
-    <script src="/js/jstree.min.js"></script>
-    <script src="/js/fetchxmlBuilder.js"></script>
+    <script src="js/jstree.min.js"></script>
+    <script src="js/fetchxmlBuilder.js"></script>
    
 </head>
 
@@ -87,7 +87,7 @@
                   </tr>
                   <tr>
                     <td>
-                        <select id="selectAttributeEntityLstFilter" class="selectElement">
+                        <select id="selectAttributeEntityLstFilter" class="selectElement" onclick="changeAttributeFilter()">
                           
                         </select>
                     </td>
@@ -97,22 +97,36 @@
                   </tr>
                   <tr>
                     <td>
-                      <select id="selectOperator">
-                        <option value="eq">Equal</option>
-                        <option value="ne">NotEqual</option>
-                        <option value="in">In</option>
-                        <option value="not-in">NotIn</option>
-                        <option value="null">Null</option>
-                        <option value="not-null">Notnull</option>
+                      <select id="selectOperator" onclick="hideShowfields();">
+                        <option value="eq" operator="=" columnFilter="true">Equal</option>
+                        <option value="ne" operator="!=" columnFilter="true">NotEqual</option>
+                        <option value="not-null" operator="not-null" columnFilter="false" type="string">Contain data</option>
+                        <option value="null" operator="null" columnFilter="false" type="string">Does not contain data</option>
+                        <option value="like" operator="%1%" columnFilter="true">Contain</option>
+                        <option value="like" operator="1%" columnFilter="true">Begins with</option>
+                        <option value="not-like"  operator="%1%" columnFilter="true">Does not contain</option>
+                        <option value="not-like" operator="1%" columnFilter="true">Does not begin with</option>
+                        <option value="like" operator="%1" columnFilter="true">Ends with</option>
+                        <option value="not-like" operator="%1" columnFilter="true">Does not Ends with</option>
+                        <option value="in" columnFilter="true">In</option>
+                        <option value="not-in" columnFilter="true">NotIn</option>
+                        <option value="null" columnFilter="true">Null</option>
+                        <option value="not-null" columnFilter="true">Notnull</option>
                       </select>
                   </td>
                   </tr>
                   <tr>
-                    <td>Value</td>
+                    <td>
+                     <span id="filterValueLabel">Value</span> 
+                    </td>
                   </tr>
                   <tr>
                     <td>
+                      <select id="pckLst" style="display: none;">
+                      </select>
                       <input type="text" id="filterValue"/>
+                      <br/>
+                      <span id="lkupGuidMsg" style="display:none;">Please enter lookup guid only.</span>
                     </td>
                   </tr>
                 </table>
