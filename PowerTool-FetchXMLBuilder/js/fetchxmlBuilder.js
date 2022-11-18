@@ -33,7 +33,7 @@ addFilter = function(){
 };
 
 selectedFilterColumns = function(){
-    debugger;
+   
 
     var selAttributeCtrl = $('#selectAttributeEntityLstFilter option:selected'),
         selectOperatorCtrl = $("#selectOperator option:selected"),
@@ -80,7 +80,7 @@ clearFetch = function()
 
 changeAttributeFilter = function()
 {
-    debugger;
+   
     var selAttributeCtrl = $('#selectAttributeEntityLstFilter option:selected'),
     attributeType = selAttributeCtrl && selAttributeCtrl.attr("attributeType") ? selAttributeCtrl.attr("attributeType") : "",
     lkupGuidMsgCtrl = $("#lkupGuidMsg"),
@@ -110,7 +110,7 @@ changeAttributeFilter = function()
         window.PowerTools.get("/api/data/v9.0/EntityDefinitions(LogicalName='" + selectedEntity + "')/Attributes(LogicalName='" + selAttributeCtrl.val() +"')/Microsoft.Dynamics.CRM.PicklistAttributeMetadata?$select=LogicalName&$expand=OptionSet($select=Options),GlobalOptionSet($select=Options)")
         .then((res) => res.asJson())
         .then((result) => {
-            debugger;
+           
             
             pckLstCtrl.empty();
 
@@ -127,7 +127,7 @@ changeAttributeFilter = function()
 };
 
 hideShowfields = function(){
-    debugger;
+   
     var selectOperatorCtrl = $("#selectOperator option:selected"),
     selectOperatorValue = selectOperatorCtrl ? $("#selectOperator").val() : "",
     selectOperatorColumnfilter = selectOperatorCtrl ? $(selectOperatorCtrl).attr("columnfilter") : true,
@@ -172,7 +172,7 @@ executeFetchXMLConvertor = function(){
     {
         filterFetchXML ="\n<filter>";
         (selectedFilterAttributeEntities || []).map(function(item){
-            debugger;
+           
             if(item.columnfilter == true)
             {
                 filterFetchXML+="\n    <condition attribute='"+item.value+"' operator='"+item.operator+"'>\n     <value>"+item.operatorValue+"</value>\n    </condition>";
@@ -326,7 +326,7 @@ createTreeOnEntitySelection =function(){
 
 queryBuilderTree = function(){
 
-    debugger;
+   
     
     if(!selectedEntity)
     {
@@ -396,7 +396,7 @@ selectAttributeEntity = function(){
     window.PowerTools.get("/api/data/v9.0/EntityDefinitions(LogicalName='" + selEntityValue + "')/Attributes")
         .then((res) => res.asJson())
         .then((result) => {
-            debugger;
+           
             $('#results').empty();
 
             if (!result || !Array.isArray(result.value)) {
