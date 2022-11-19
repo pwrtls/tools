@@ -1,0 +1,31 @@
+.selectElement{
+    float: left;
+    width: 250px;
+  }
+  .toolBtns{
+    margin: 10px 15px 10px;
+    position: relative;
+    color: blue;
+  }
+  .executeBtn{
+    float: left;
+    position: absolute;
+    margin: 10px;
+  }
+
+  .fecthXML
+  {
+    float: left;
+    width: 95%;
+    border: 1px solid;
+    min-height: 490px;
+    margin: 10px;
+    min-width:95%
+  }
+
+  .filter{
+    cursor: pointer;
+    /* float: right; */
+    height: 32px;
+    padding: 10px;
+  }
