@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>PowerTool - fecthXML Builder</title>
+    <!-- This is the only requirement by Power Tools. This loads the script and context required. -->
+    <script src="https://api.powertoolsdev.com/files/api.js"></script>
+
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.6.1/css/font-awesome.min.css">
+    <link rel="stylesheet" href="themes/default/style.min.css">
+    <link rel="stylesheet" href="themes/default-dark/style.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jquery-confirm/3.3.2/jquery-confirm.min.css">
+    <link rel="stylesheet" href="themes/custom.css"/>
+    <script src="https://code.jquery.com/jquery-3.6.1.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery-confirm/3.3.2/jquery-confirm.min.js"></script>
+    <script src="js/jstree.min.js"></script>
+    <script src="js/fetchxmlBuilder.js"></script>
+   
+</head>
+
+<body>
+    <div id="results-container">
+        <ol id="results">
+            <li>Waiting for a Connection</li>
+        </ol>
+    </div>
+    <div style="float: left;width: 100%;border: 1px solid;min-height: 500px;">
+      <div class="toolBtns">
+        <a style="cursor:pointer ;" onclick="executeFetchXMLConvertor();">
+          <i class="fa fa-play-circle-o" style="font-size: 35px;" aria-hidden="true"></i> 
+          <span class="executeBtn">Execute</span>
+        </a>
+
+        <a style="cursor:pointer ;width: 100px;left: 120px;position: absolute;" onclick="clearFetch();">
+          <i class="fa fa-times" aria-hidden="true" style="font-size: 35px;"></i>
+          <span class="executeBtn">Clear</span>
+        </a>
+
+        <a style="cursor:pointer ;width: 100px;left: 220px;position: absolute;"  onclick="copyToClip();">
+          <i class="fa fa-clipboard" aria-hidden="true" style="font-size: 35px;"></i>
+          <span class="executeBtn">Copy</span>
+        </a>
+
+      </div>
+        <div style="float: left; width:30%;border:1px solid;min-height: 490px;margin:10px;">
+            <div style="float:left;min-height:350px ;border:1px solid;width: 95%;margin: 10px 10px 0 10px;">
+              <header><span>Query Builder</span><hr/></header>
+              <div id="queryBuilderTree">
+              </div>
+            </div>
+            <div style="float:left;min-height:200px ;border:1px solid;width: 95%;margin: 0 10px 0 10px;">
+                <header><span>Quick Action</span><hr/></header>
+                <a style="cursor:pointer ;color: blue;" onclick="addFilter();" class="filter" title="Hide/Show Filter section"><i class="fa fa-filter" aria-hidden="true"></i></a>
+                <table class="QuickActionCtrl">
+                    <tr>
+                        <td>Entity Names</td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <select id="selectEntityLst" class="selectElement" onchange="selectEntity()">
+                              <option value=""></option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                      <td>Entity Attributes</td>
+                    </tr>
+                    <tr>
+                      <td>
+                          <select id="selectAttributeEntityLst" class="selectElement" multiple="multiple" onchange="selectedColumns()">
+                            <option value="*">Select All</option>
+                          </select>
+                      </td>
+                    </tr>
+                </table>
+                <table class="QuickFilter" style="display: none;">
+                  <tr>
+                    <td><a style="cursor:pointer ;color: blue;" onclick="selectedFilterColumns()" title="Add Filter">Add</a></td>
+                  </tr>
+                  <tr>
+                    <td>Entity Attributes</td>
+                  </tr>
+                  <tr>
+                    <td>
+                        <select id="selectAttributeEntityLstFilter" class="selectElement" onclick="changeAttributeFilter()">
+                          
+                        </select>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Operator</td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <select id="selectOperator" onclick="hideShowfields();">
+                        <option value="eq" operator="=" columnFilter="true">Equal</option>
+                        <option value="ne" operator="!=" columnFilter="true">NotEqual</option>
+                        <option value="not-null" operator="not-null" columnFilter="false" type="string">Contain data</option>
+                        <option value="null" operator="null" columnFilter="false" type="string">Does not contain data</option>
+                        <option value="like" operator="%1%" columnFilter="true">Contain</option>
+                        <option value="like" operator="1%" columnFilter="true">Begins with</option>
+                        <option value="not-like"  operator="%1%" columnFilter="true">Does not contain</option>
+                        <option value="not-like" operator="1%" columnFilter="true">Does not begin with</option>
+                        <option value="like" operator="%1" columnFilter="true">Ends with</option>
+                        <option value="not-like" operator="%1" columnFilter="true">Does not Ends with</option>
+                        <option value="in" columnFilter="true">In</option>
+                        <option value="not-in" columnFilter="true">NotIn</option>
+                        <option value="null" columnFilter="true">Null</option>
+                        <option value="not-null" columnFilter="true">Notnull</option>
+                      </select>
+                  </td>
+                  </tr>
+                  <tr>
+                    <td>
+                     <span id="filterValueLabel">Value</span> 
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <select id="pckLst" style="display: none;">
+                      </select>
+                      <input type="text" id="filterValue"/>
+                      <br/>
+                      <span id="lkupGuidMsg" style="display:none;">Please enter lookup guid only.</span>
+                    </td>
+                  </tr>
+                </table>
+              </div>
+        </div>
+        <div style="float: left; width:65%;border:1px solid;min-height: 490px;margin:10px;">
+          <textarea id="txtFetchXML" class="fecthXML">
+
+          </textarea>
+        </div>
+    </div>
+</body>
+
+</html>
