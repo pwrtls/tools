@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Table, Checkbox, Button } from 'antd';
 
-import { IWorkflow } from 'models/workflows';
-import { getWorkflows } from 'services/workflowService';
+import { IWorkflow } from '../models/workflows';
+import { getWorkflows } from '../services/workflowService';
 
 export const WorkflowSelection: React.FC = () => {
   const [workflows, setWorkflows] = useState<IWorkflow[]>([]);
@@ -39,7 +39,7 @@ export const WorkflowSelection: React.FC = () => {
           {
             title: 'Select',
             render: (text, record) => (
-              <Checkbox onChange={e => handleSelectWorkflow(record.workflowId, e.target.checked)} />
+              <Checkbox onChange={e => handleSelectWorkflow(record.workflowid, e.target.checked)} />
             ),
           },
           // Other columns for workflow details

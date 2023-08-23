@@ -13,32 +13,31 @@ export const WorkflowConversion: React.FC = () => {
     const [conversionLogs, setConversionLogs] = useState<string[]>([]);
     const [convertedFlows, setConvertedFlows] = useState<IPowerAutomateFlow[]>([]);
 
-    const convertWorkflows = async (workflows: IWorkflow[]) => {
-        setLoading(true);
-        setConversionLogs(['Starting conversion...']);
+    const [selectedWorkflows, setSelectedWorkflows] = useState<IWorkflow[]>([]);
 
-        for (const workflow of workflows) {
-            try {
-                // Analyze the Classic Workflow
-                const analysisResult = await analyzeWorkflow(workflow);
+    const conversionColumns = [
+        {
+            title: 'Workflow Name',
+            dataIndex: 'name',
+            key: 'name',
+        },
+        {
+            title: 'Status',
+            dataIndex: 'status',
+            key: 'status',
+        },
+        // Add more columns as needed
+    ];
 
-                // Map the Classic Workflow to Power Automate Flow
-                const mappedFlow = mapWorkflowToFlow(analysisResult);
-
-                // Create the Power Automate Flow using the API
-                const createdFlow = await createFlow(mappedFlow);
-
-                // Log the successful conversion
-                setConversionLogs((prevLogs) => [...prevLogs, `Converted ${workflow.name} successfully.`]);
-                setConvertedFlows((prevFlows) => [...prevFlows, createdFlow]);
-            } catch (error) {
-                // Log any conversion errors
-                setConversionLogs((prevLogs) => [...prevLogs, `Failed to convert ${workflow.name}: ${error.message}`]);
-            }
+    setConvertedFlows((prevFlows: IPowerAutomateFlow[]) => {
+        const newFlows = [...prevFlows];
+        const createdFlow = createFlow(newFlows[0]);
+        if (createdFlow !== null) {
+            newFlows.push(createdFlow);
         }
+        return newFlows;
+    });
 
-        setLoading(false);
-    };
 
     const analyzeWorkflow = async (workflow: IWorkflow) => {
         // Analyze the Classic Workflow structure, complexities, custom steps, plugins
@@ -46,16 +45,17 @@ export const WorkflowConversion: React.FC = () => {
         // ...
     };
 
-    const mapWorkflowToFlow = (analysisResult: any) => {
-        // Map the Classic Workflow to Power Automate Flow based on the analysis
-        // This function will return an object representing the mapped Power Automate Flow
-        // ...
-    };
-
-    const createFlow = async (mappedFlow: any) => {
+    const createFlow = async (mappedFlow: IPowerAutomateFlow): Promise<IPowerAutomateFlow> => {
         // Create the Power Automate Flow using the API
         // This function will return the created Power Automate Flow object
-        // ...
+        //const createdFlow = await createPowerAutomateFlow(mappedFlow);
+
+        // Return the created Power Automate Flow object
+        return {
+            flowId: "",
+            name: "",
+            status: "Converted", // Update the status property to be either "Converted" or "Failed"
+        };
     };
 
     return (

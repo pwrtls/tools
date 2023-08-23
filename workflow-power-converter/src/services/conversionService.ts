@@ -9,6 +9,10 @@ export const getConversionMappings = async (): Promise<IConversionMapping[]> => 
   // Logic to fetch existing conversion mappings
 };
 
+export const getConversionLogs = async (workflowId: string): Promise<IConversionLog[]> => {
+  // Logic to fetch conversion logs for a workflow
+};
+
 export const saveConversionMapping = async (mapping: IConversionMapping): Promise<void> => {
   // Logic to save a new conversion mapping
 };

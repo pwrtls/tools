@@ -1,24 +1,24 @@
 import React from 'react';
 import { Button } from 'antd';
 
-import { IConvertedWorkflow } from '../models/convertedWorkflows';
+import { IPowerAutomateFlow } from '../models/powerAutomateFlow';
 
 interface WorkflowTestingProps {
-  convertedWorkflows: IConvertedWorkflow[];
+  powerAutomateFlows: IPowerAutomateFlow[];
 }
 
-export const WorkflowTesting: React.FC<WorkflowTestingProps> = ({ convertedWorkflows }) => {
-  const handleActivateFlow = (workflowId: string) => {
+export const WorkflowTesting: React.FC<WorkflowTestingProps> = ({ powerAutomateFlows }) => {
+  const handleActivateFlow = (flowId: string) => {
     // Logic to "Turn On" the converted Power Automate Flow
   };
 
   return (
     <div>
       <h2>Testing & Validation</h2>
-      {convertedWorkflows.map(workflow => (
-        <div key={workflow.workflowId}>
+      {powerAutomateFlows.map(workflow => (
+        <div key={workflow.flowId}>
           <h3>{workflow.name}</h3>
-          <Button onClick={() => handleActivateFlow(workflow.workflowId)}>Activate</Button>
+          <Button onClick={() => handleActivateFlow(workflow.flowId)}>Activate</Button>
           {/* Additional UI elements for manual activation, logs, and troubleshooting */}
         </div>
       ))}

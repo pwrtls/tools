@@ -7,7 +7,7 @@ interface WorkflowDeploymentProps {
   powerAutomateFlows: IPowerAutomateFlow[];
 }
 
-export const WorkflowDeployment: React.FC<WorkflowDeploymentProps> = ({ convertedWorkflows }) => {
+export const WorkflowDeployment: React.FC<WorkflowDeploymentProps> = ({ powerAutomateFlows }) => {
   const handleDeployWorkflow = (workflowId: string) => {
     // Logic to deploy the converted workflows to the original environment
   };
@@ -15,10 +15,10 @@ export const WorkflowDeployment: React.FC<WorkflowDeploymentProps> = ({ converte
   return (
     <div>
       <h2>Deployment & Monitoring</h2>
-      {convertedWorkflows.map(workflow => (
-        <div key={workflow.workflowId}>
+      {powerAutomateFlows.map(workflow => (
+        <div key={workflow.flowId}>
           <h3>{workflow.name}</h3>
-          <Button onClick={() => handleDeployWorkflow(workflow.workflowId)}>Deploy</Button>
+          <Button onClick={() => handleDeployWorkflow(workflow.flowId)}>Deploy</Button>
           {/* Additional UI elements for monitoring, reporting, and updates */}
         </div>
       ))}

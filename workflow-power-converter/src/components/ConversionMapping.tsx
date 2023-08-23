@@ -26,7 +26,7 @@ export const ConversionMapping: React.FC = () => {
     <div>
       <h2>Conversion Mapping</h2>
       <Table dataSource={mappings} /* columns and other props */ />
-      <Button onClick={() => /* open mapping editor */}>Add Mapping</Button>
+      <Button>Add Mapping</Button>
     </div>
   );
 };

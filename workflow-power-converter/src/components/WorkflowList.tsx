@@ -1,13 +1,13 @@
 import React, { useContext, useEffect, useState } from 'react';
 import { Spin, Table } from 'antd';
 
-import { IoDataResponse } from 'models/oDataResponse';
-import { IWorkflow } from 'models/workflows';
+import { IoDataResponse } from '../models/oDataResponse';
+import { IWorkflow } from '../models/workflows';
 
-import { workflowsColumns } from 'utils/columns';
+import { workflowsColumns } from '../utils/columns';
 
-import { PowerToolsContext } from 'powertools/context';
-import { usePowerToolsApi } from 'powertools/apiHook';
+import { PowerToolsContext } from '../powertools/context';
+import { usePowerToolsApi } from '../powertools/apiHook';
 
 export const WorkflowList: React.FC = () => {
     const { connectionName } = useContext(PowerToolsContext);
