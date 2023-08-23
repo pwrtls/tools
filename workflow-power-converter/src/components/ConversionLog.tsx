@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
+import { useState, useEffect } from 'react';
 import { Table } from 'antd';
-
 import { IConversionLog } from '../models/conversion';
-// Assume a function getConversionLogs from services
+import { getConversionLogs } from '../services/conversionService';
 
 export const ConversionLog: React.FC = () => {
   const [logs, setLogs] = useState<IConversionLog[]>([]);
