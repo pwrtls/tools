@@ -1,0 +1,19 @@
+{
+    "name": "workflow-conversion-tool",
+    "version": "1.0.0",
+    "description": "Tool for converting Classic Dataverse Workflows to Power Automate Flows",
+    "main": "index.js",
+    "scripts": {
+      "start": "cross-env PORT=4201 react-scripts start",
+      "build": "react-scripts build",
+      "test": "react-scripts test",
+      "eject": "react-scripts eject"
+    },
+    "dependencies": {
+      "react": "^17.0.2",
+      "antd": "^4.16.13"
+    },
+    "devDependencies": {
+    }
+  }
+  
