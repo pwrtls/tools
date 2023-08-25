@@ -7,8 +7,6 @@ import { MainView } from './views/MainView';
 import { WorkflowList } from './components/WorkflowList';
 import { WorkflowConversion } from './components/WorkflowConversion';
 
-import './App.css';
-
 export const AppRouter: React.FC = () => (
     <PowerToolsContextProvider showNoConnection>
         <HashRouter>
