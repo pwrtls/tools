@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Table, Button } from 'antd';
 
 import { IConversionMapping } from '../models/conversion';
-import { getConversionMappings, saveConversionMapping } from '../services/conversionService';
+import { getConversionMappings } from '../services/conversionService';
 
 export const ConversionMapping: React.FC = () => {
   const [mappings, setMappings] = useState<IConversionMapping[]>([]);
@@ -16,11 +16,11 @@ export const ConversionMapping: React.FC = () => {
     loadMappings();
   }, []);
 
-  const handleSaveMapping = (mapping: IConversionMapping) => {
-    saveConversionMapping(mapping).then(() => {
-      setMappings([...mappings, mapping]);
-    });
-  };
+  // const handleSaveMapping = (mapping: IConversionMapping) => {
+  //   saveConversionMapping(mapping).then(() => {
+  //     setMappings([...mappings, mapping]);
+  //   });
+  // };
 
   return (
     <div>

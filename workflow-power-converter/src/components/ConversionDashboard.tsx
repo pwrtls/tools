@@ -9,7 +9,7 @@ export const ConversionDashboard: React.FC = () => {
     <div>
       <ConversionMapping />
       <ConversionProcess />
-      <ConversionLog />
+      {/* <ConversionLog /> */}
     </div>
   );
 };

@@ -8,7 +8,7 @@ export const ConversionProcess: React.FC = () => {
 
   const handleConvert = async (workflowId: string) => {
     setProcessing(true);
-    const log = await convertClassicWorkflow(workflowId);
+    //const log = await convertClassicWorkflow(workflowId);
     // Handle log, update UI, etc.
     setProcessing(false);
   };

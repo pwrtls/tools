@@ -1,20 +1,23 @@
-import React from 'react';
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Table } from 'antd';
 import { IConversionLog } from '../models/conversion';
 import { getConversionLogs } from '../services/conversionService';
 
-export const ConversionLog: React.FC = () => {
+export const ConversionLog: React.FC<{ workflowId: string }> = ({ workflowId }) => {
   const [logs, setLogs] = useState<IConversionLog[]>([]);
 
   useEffect(() => {
     const loadLogs = async () => {
-      const res = await getConversionLogs();
-      setLogs(res);
+      try {
+        const res = await getConversionLogs(workflowId); // Providing workflowId here
+        setLogs(res);
+      } catch (error) {
+        console.error("Failed to load conversion logs:", error);
+      }
     };
 
     loadLogs();
-  }, []);
+  }, [workflowId]); // Added workflowId as a dependency
 
   return (
     <div>

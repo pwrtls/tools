@@ -1,9 +1,9 @@
 export interface IWorkflow {
-    workflowid: string;
+    id: string;
     name: string;
     type: WorkflowType;
     category: WorkflowCategory;
-    status: WorkflowStatus;
+    statecode: WorkflowStatus;
     mode: WorkflowMode;
     triggers: string[]; // List of triggers
     primaryentity: string;

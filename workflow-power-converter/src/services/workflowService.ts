@@ -1,6 +1,19 @@
-import { IWorkflow } from '../models/workflows';
+import { IoDataResponse } from "../models/oDataResponse";
+import { IWorkflow } from "../models/workflows";
 
 export const getWorkflows = async (): Promise<IWorkflow[]> => {
-  // Logic to fetch the list of Classic Workflows using user credentials
-  // You can use the Power Platform API to fetch the workflows
+  try {
+    const workflowResponse = await window.PowerTools.get(`/api/data/v9.0/workflows`);
+    const workflowsJson = await workflowResponse.asJson<IoDataResponse<IWorkflow>>();
+
+    // Validate the data before casting
+    if (workflowsJson && workflowsJson.value && Array.isArray(workflowsJson.value)) {
+      return workflowsJson.value as IWorkflow[];
+    } else {
+      throw new Error('Invalid data format received');
+    }
+  } catch (error) {
+    console.error('Failed to fetch workflows:', error);
+    throw error;
+  }
 };

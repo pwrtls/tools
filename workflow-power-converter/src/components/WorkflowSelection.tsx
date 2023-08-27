@@ -39,7 +39,7 @@ export const WorkflowSelection: React.FC = () => {
           {
             title: 'Select',
             render: (text, record) => (
-              <Checkbox onChange={e => handleSelectWorkflow(record.workflowid, e.target.checked)} />
+              <Checkbox onChange={e => handleSelectWorkflow(record.id, e.target.checked)} />
             ),
           },
           // Other columns for workflow details
