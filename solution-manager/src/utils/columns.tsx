@@ -6,10 +6,9 @@ import { ISolutionComponentSummary } from 'models/solutionComponentSummary';
 
 import { SolutionComponentActionButton, ViewSolutionDetailsButton } from './buttons';
 import { SolutionInfo } from './info';
-
 import { Button } from 'antd';
-import { SolutionPicker } from '../views/SolutionsView';
 
+import { usePowerToolsApi } from 'powertools/apiHook';
 
 export const solutionsColumns: ColumnsType<ISolution> = [
     {
@@ -35,10 +34,10 @@ export const solutionsColumns: ColumnsType<ISolution> = [
 const endpoint = '/api/data/v9.2/';
 const customHeaders = {
     "Content-Type": "application/json"
-  };
-  
+};
 
-export const getSolutionComponentColumns = (solutionId?: string) => {
+export const useSolutionComponentColumns = (solutionId?: string) => {
+    const { get, post } = usePowerToolsApi();
     const solutionComponentColumns: ColumnsType<ISolutionComponentSummary> = [
         { title: 'Display Name', dataIndex: 'msdyn_displayname', key: 'displayName', ellipsis: true, render: (value?: string) => value || '-' },
         { title: 'Name', dataIndex: 'msdyn_name', key: 'name', ellipsis: true, render: (value?: string) => value || '-' },
@@ -54,49 +53,17 @@ export const getSolutionComponentColumns = (solutionId?: string) => {
                     solutionId={solutionId}
                     component={record}
                 />,
-        }/*,
-        {
-            title: 'Move To', key: 'moveto',
-            render: (v, record) =>
-            <Button type="primary" onClick= { () => componentAPI(endpoint + 'AddSolutionComponent', 'POST', new URLSearchParams, customHeaders, new Object({
-                "ComponentId":record.msdyn_objectid,
-                "ComponentType":record.msdyn_componenttype.toString(),
-                "SolutionUniqueName":prompt("Please provide the Unique Name of the target solution for this component.") ?? '',
-                "AddRequiredComponents":'false'
-              }))
-            }>
-            Move To
-          </Button>,
-        },
-        {
-            title: 'Delete', key: 'delete',
-            render: (v, record) =>
-            <Button type="primary" onClick= { () =>
-                componentAPI(endpoint + 'solutions?$select=uniquename&$filter=solutionid eq ' + record.msdyn_solutionid, 'GET').then(
-                    function success(result) {
-                        console.log(result)
-                        var data = JSON.parse(result.content)
-                        componentAPI(endpoint + 'RemoveSolutionComponent', 'POST', new URLSearchParams, customHeaders, {
-                            "ComponentId":'{' + record.msdyn_objectid + '}',
-                            "ComponentType":record.msdyn_componenttype.toString(),
-                            "SolutionUniqueName": 'test'//data.value[0].uniquename
-                          })
-                      })
-            }>
-            Delete
-          </Button>,
-        },*/
-    ]; //The above is awaiting 
+        }
+    ];
 
     return solutionComponentColumns;
 }
-
 
 export const solutionHistoryColumns: ColumnsType<any> = [
     { title: 'Start', dataIndex: 'starttime', key: 'startTime', render: (value: string) => new Date(value).toLocaleString() },
     { title: 'End', dataIndex: 'endtime', key: 'endTime', render: (value: string) => new Date(value).toLocaleString() },
     { title: 'Version', dataIndex: 'solutionversion', key: 'version' },
     { title: 'Operation', key: 'operation', render: (v, record) => record['operation@OData.Community.Display.V1.FormattedValue'] || '-' },
-    { title: 'Suboperation', key: 'suboperation', render: (v, record) => record['suboperation@OData.Community.Display.V1.FormattedValue']  || '-' },
+    { title: 'Suboperation', key: 'suboperation', render: (v, record) => record['suboperation@OData.Community.Display.V1.FormattedValue'] || '-' },
     { title: 'Publisher', dataIndex: 'publishername', key: 'publishername' },
 ];

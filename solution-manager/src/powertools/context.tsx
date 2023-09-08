@@ -5,10 +5,11 @@ type PowerToolsContextType = {
     isLoaded: boolean;
     connectionName: string;
     get?: typeof window.PowerTools.get;
+    post?: typeof window.PowerTools.post;
     download?: typeof window.PowerTools.download;
 };
 
-export const PowerToolsContext = React.createContext<PowerToolsContextType>({ isLoaded: false, connectionName: '' });
+export const PowerToolsContext = React.createContext<PowerToolsContextType>({ isLoaded: false, connectionName: '', get: undefined, post: undefined, download: undefined });
 PowerToolsContext.displayName = 'Power Tools Context';
 
 interface IPowerToolsContextProviderProps extends React.PropsWithChildren {
@@ -84,8 +85,8 @@ export class PowerToolsContextProvider extends React.PureComponent<IPowerToolsCo
 
     render() {
         return (
-            <PowerToolsContext.Provider value={{ isLoaded: this.state.isLoaded, connectionName: this.state.connectionName, get: window.PowerTools?.get, download: window.PowerTools?.download }}>
-                { this.content }
+            <PowerToolsContext.Provider value={{ isLoaded: this.state.isLoaded, connectionName: this.state.connectionName, get: window.PowerTools?.get, post: window.PowerTools?.post, download: window.PowerTools?.download }}>
+                {this.content}
             </PowerToolsContext.Provider>
         );
     }
