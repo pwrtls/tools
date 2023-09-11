@@ -12,7 +12,7 @@ import { useNavigate } from 'react-router-dom';
 
 // Define constants for better clarity and maintainability
 const PAGE_SIZE = 150;
-const API_ENDPOINT = '/api/data/v9.0/solutions';
+const API_ENDPOINT = 'api/data/v9.0/solutions';
 
 export const SolutionsView: React.FC = () => {
     const { get } = usePowerToolsApi();

@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { Button, Table } from 'antd';
+import { Button, Table, Modal } from 'antd';
 
 import { usePowerToolsApi } from 'powertools/apiHook';
 import { useSolutionComponentColumns } from 'utils/columns';
 
 import { IoDataResponse } from 'models/oDataResponse';
 import { ISolutionComponentSummary } from 'models/solutionComponentSummary';
+import { ISolution } from 'models/solutions';
 
 export const ComponentsTable: React.FC<{ solutionId?: string }> = (props) => {
     const { get, post } = usePowerToolsApi();
@@ -13,7 +14,40 @@ export const ComponentsTable: React.FC<{ solutionId?: string }> = (props) => {
     const [isLoadingMore, setLoadingMore] = useState(false);
     const [skipToken, setSkipToken] = useState('');
     const [components, setComponents] = useState<ISolutionComponentSummary[]>([]);
-    const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([]); // For row selection
+    const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([]);
+    const [unmanagedSolutions, setUnmanagedSolutions] = useState<ISolution[]>([]);
+    const [selectedSolution, setSelectedSolution] = useState<string>('');
+    const [isModalVisible, setIsModalVisible] = useState(false);
+    const solutionColumns = [
+        {
+            title: 'Friendly Name',
+            dataIndex: 'friendlyname',
+            key: 'friendlyname',
+        },
+        {
+            title: 'Unique Name',
+            dataIndex: 'uniquename',
+            key: 'uniquename',
+        },
+        {
+            title: 'Version',
+            dataIndex: 'version',
+            key: 'version',
+        },
+        {
+            title: 'Publisher',
+            dataIndex: 'publisherid',
+            key: 'publisherid',
+            render: (publisher: any) => publisher?.name || 'N/A', // Assuming publisher object has a name property
+        },
+        {
+            title: 'Action',
+            key: 'action',
+            render: (text: string, record: ISolution) => (
+                <Button onClick={() => handleSolutionSelection(record.uniquename)}>Select</Button>
+            ),
+        },
+    ];
 
     const loadSolutionComponents = async (skipTokenValue?: string) => {
         if (!get || !post) {
@@ -89,17 +123,60 @@ export const ComponentsTable: React.FC<{ solutionId?: string }> = (props) => {
             setSelectedRowKeys(selectedKeys as string[]);
         },
     };
-    const endpoint = '/api/data/v9.2/';
+    const endpoint = 'api/data/v9.2/';
     const customHeaders = {
         "Content-Type": "application/json"
     };
 
+    useEffect(() => {
+        const loadUnmanagedSolutions = async () => {
+            const fetchedSolutions = await fetchUnmanagedSolutions();
+            setUnmanagedSolutions(fetchedSolutions);
+        };
+
+        loadUnmanagedSolutions();
+    }, []);
+
+    const fetchUnmanagedSolutions = async (): Promise<ISolution[]> => {
+        if (!get) {
+            return [];
+        }
+    
+        const query = new URLSearchParams();
+        query.set('$select', 'friendlyname,uniquename,version,publisherid');
+        query.set('$filter', '(isvisible eq true) and (ismanaged eq false)');
+        query.set('$orderby', 'friendlyname asc');
+        query.set('$expand', 'publisherid'); // To fetch publisher details
+    
+        try {
+            const res = await get(`${endpoint + 'solutions'}?${query.toString()}`);
+            const js = await res.asJson<IoDataResponse<ISolution>>();
+            return js.value;
+        } catch (error) {
+            console.error("Error fetching unmanaged solutions:", error);
+            return [];
+        }
+    };
+    
+
+    const showUnmanagedSolutionsModal = async () => {
+        const fetchedSolutions = await fetchUnmanagedSolutions();
+        setUnmanagedSolutions(fetchedSolutions);
+        setIsModalVisible(true);
+    };
+
+    const handleSolutionSelection = (solutionName: string) => {
+        setSelectedSolution(solutionName);
+        moveToComponent();
+        setIsModalVisible(false); // Close the modal after moving the component
+    };
+
     const moveToComponent = () => {
-        if (post) {
+        if (post && selectedSolution) {
             post(endpoint + 'AddSolutionComponent', {
-                "ComponentId": selectedRowKeys[0], // Assuming only one row can be selected at a time
+                "ComponentId": selectedRowKeys[0],
                 "ComponentType": components.find(comp => comp.msdyn_objectid === selectedRowKeys[0])?.msdyn_componenttype.toString(),
-                "SolutionUniqueName": prompt("Please provide the Unique Name of the target solution for this component.") ?? '',
+                "SolutionUniqueName": selectedSolution,
                 "AddRequiredComponents": 'false'
             }, customHeaders);
         }
@@ -126,8 +203,24 @@ export const ComponentsTable: React.FC<{ solutionId?: string }> = (props) => {
 
     return (
         <div>
-            <Button onClick={moveToComponent} disabled={selectedRowKeys.length !== 1}>Move to Solution</Button>
-            <Button onClick={deleteComponent} disabled={selectedRowKeys.length !== 1}>Delete</Button>
+            <Button onClick={showUnmanagedSolutionsModal} disabled={selectedRowKeys.length !== 1}>Move to Solution</Button>
+            <Button onClick={deleteComponent} disabled={selectedRowKeys.length !== 1}>Remove from Solution</Button>
+
+            <Modal
+                title="Select an Unmanaged Solution"
+                visible={isModalVisible}
+                onCancel={() => setIsModalVisible(false)}
+                footer={null}
+                width={800} // Adjust width as needed
+            >
+                <Table
+                    dataSource={unmanagedSolutions}
+                    columns={solutionColumns}
+                    rowKey="solutionid"
+                    pagination={false}
+                />
+            </Modal>
+
             <Table<ISolutionComponentSummary>
                 loading={isLoadingComponents}
                 columns={useSolutionComponentColumns(props.solutionId)}
