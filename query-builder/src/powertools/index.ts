@@ -1,5 +1,6 @@
 // src/powertools/index.ts
 
 export * from './context/PowerToolsContext';
-export { default as useFetchEntities } from './hooks/useFetchEntities';
+export { useFetchEntities } from './hooks/useFetchEntities';
+export { usePowerToolsApi } from './hooks/usePowerToolsApi';
 export * from './utils/formatData';

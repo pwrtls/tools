@@ -1,19 +1,24 @@
 // src/powertools/hooks/useFetchEntities.ts
 
 import { useState, useEffect } from 'react';
-import { usePowerTools } from '../context/PowerToolsContext';
+import { usePowerToolsApi } from './usePowerToolsApi';
 
-const useFetchEntities = () => {
-    const powerTools = usePowerTools();
-    const [entities, setEntities] = useState([]);
+export const useFetchEntities = () => {
+    const powerTools = usePowerToolsApi();
+    const [entities, setEntities] = useState<IHttpResult[]>([]);
 
     useEffect(() => {
-        powerTools.get('/entities').then(data => {
-            setEntities(data);
-        });
+        if (powerTools.get) {
+            powerTools.get('/api/data/v9.2/entities').then((data: IHttpResult | IHttpResult[]) => {
+                // todo: update this to get array from response
+                if (Array.isArray(data)) {
+                    setEntities(data);
+                } else {
+                    setEntities([data]);
+                }
+            });
+        }
     }, [powerTools]);
 
     return entities;
-};
-
-export default useFetchEntities;
+}
