@@ -1,14 +1,11 @@
-import React from 'react';
-import './QueryBuilder.css';
+import React, { ReactNode } from 'react';
 
-const QueryBuilder = () => {
-    // Component logic here
-
-    return (
-        <div className="queryBuilder">
-            {/* UI elements and child components here */}
-        </div>
-    );
-}
+const QueryBuilder: React.FC = () => {
+  return (
+    <div className="query-builder">
+      {/* Add your code here */}
+    </div>
+  );
+};
 
 export default QueryBuilder;
