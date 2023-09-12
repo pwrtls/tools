@@ -167,44 +167,57 @@ export const ComponentsTable: React.FC<{ solutionId?: string }> = (props) => {
 
     const handleSolutionSelection = (solutionName: string) => {
         setSelectedSolution(solutionName);
-        moveToComponent();
+        moveToComponents();
         setIsModalVisible(false); // Close the modal after moving the component
     };
 
-    const moveToComponent = () => {
-        if (post && selectedSolution) {
-            post(endpoint + 'AddSolutionComponent', {
-                "ComponentId": selectedRowKeys[0],
-                "ComponentType": components.find(comp => comp.msdyn_objectid === selectedRowKeys[0])?.msdyn_componenttype.toString(),
-                "SolutionUniqueName": selectedSolution,
-                "AddRequiredComponents": 'false'
-            }, customHeaders);
+    const moveToComponents = () => {
+        if (!post || !selectedSolution) {
+            return;
+        }
+
+        for (const componentKey of selectedRowKeys) {
+            const component = components.find(comp => comp.msdyn_objectid === componentKey);
+            if (component) {
+                post(endpoint + 'AddSolutionComponent', {
+                    "ComponentId": componentKey,
+                    "ComponentType": component.msdyn_componenttype.toString(),
+                    "SolutionUniqueName": selectedSolution,
+                    "AddRequiredComponents": 'false'
+                }, customHeaders);
+            }
         }
     };
 
-    const deleteComponent = () => {
+    const deleteComponents = () => {
         if (!get) {
             return;
         }
 
-        get(endpoint + 'solutions?$select=uniquename&$filter=solutionid eq ' + props.solutionId).then(
-            function success(result) {
-                console.log(result);
-                var data = JSON.parse(result.content);
-                if (post) {
-                    post(endpoint + 'RemoveSolutionComponent', {
-                        "ComponentId": '{' + selectedRowKeys[0] + '}', // Assuming only one row can be selected at a time
-                        "ComponentType": components.find(comp => comp.msdyn_objectid === selectedRowKeys[0])?.msdyn_componenttype.toString(),
-                        "SolutionUniqueName": 'test' //data.value[0].uniquename
-                    }, customHeaders);
+        get(endpoint + 'solutions?$select=uniquename&$filter=solutionid eq ' + props.solutionId).then(function success(result) {
+            console.log(result);
+            const data = JSON.parse(result.content);
+            const solutionUniqueName = 'test'; // or use: data.value[0].uniquename
+
+            for (const componentKey of selectedRowKeys) {
+                const component = components.find(comp => comp.msdyn_objectid === componentKey);
+                if (component) {
+                    if (post) {
+                        post(endpoint + 'RemoveSolutionComponent', {
+                            "ComponentId": '{' + componentKey + '}',
+                            "ComponentType": component.msdyn_componenttype.toString(),
+                            "SolutionUniqueName": solutionUniqueName
+                        }, customHeaders);
+                    }
                 }
-            });
+            }
+        });
     };
 
     return (
         <div>
-            <Button onClick={showUnmanagedSolutionsModal} disabled={selectedRowKeys.length !== 1}>Move to Solution</Button>
-            <Button onClick={deleteComponent} disabled={selectedRowKeys.length !== 1}>Remove from Solution</Button>
+            <Button onClick={showUnmanagedSolutionsModal} disabled={selectedRowKeys.length < 1}>Move to Solution</Button>
+            <Button onClick={deleteComponents} disabled={selectedRowKeys.length < 1}>Remove from Solution</Button>
 
             <Modal
                 title="Select an Unmanaged Solution"
