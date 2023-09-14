@@ -1,5 +1,3 @@
-import React, { ReactNode } from 'react';
-
 const QueryBuilder: React.FC = () => {
   return (
     <div className="query-builder">
