@@ -3,8 +3,6 @@ import ReactDOM from 'react-dom/client';
 
 import { ConfigProvider } from 'antd';
 import enUS from 'antd/es/locale/en_US';
-
-// Remove the CSS import and add this line:
 import { StyleProvider } from '@ant-design/cssinjs';
 
 import { AppRouter } from './AppRouter';

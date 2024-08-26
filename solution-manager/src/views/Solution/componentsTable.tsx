@@ -1,9 +1,7 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { Button, Table, Modal, Progress, message, Space } from 'antd';
-
 import { usePowerToolsApi } from 'powertools/apiHook';
 import { useSolutionComponentColumns } from 'utils/columns';
-
 import { IoDataResponse } from 'models/oDataResponse';
 import { ISolutionComponentSummary } from 'models/solutionComponentSummary';
 import { ISolution } from 'models/solutions';
@@ -16,7 +14,6 @@ export const ComponentsTable: React.FC<{ solutionId?: string }> = (props) => {
     const [components, setComponents] = useState<ISolutionComponentSummary[]>([]);
     const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([]);
     const [unmanagedSolutions, setUnmanagedSolutions] = useState<ISolution[]>([]);
-    const [selectedSolution, setSelectedSolution] = useState<string>('');
     const [isModalVisible, setIsModalVisible] = useState(false);
     const [copying, setCopying] = useState(false);
     const [progress, setProgress] = useState(0);
@@ -72,7 +69,6 @@ export const ComponentsTable: React.FC<{ solutionId?: string }> = (props) => {
     }, [post, selectedRowKeys, components, customHeaders]);
 
     const handleSolutionSelection = useCallback((solutionName: string) => {
-        setSelectedSolution(solutionName);
         setCopying(true);
         setIsModalVisible(false);
         copyToComponents(solutionName);
@@ -277,10 +273,6 @@ export const ComponentsTable: React.FC<{ solutionId?: string }> = (props) => {
             </Button>
         </Space>
     );
-
-    useEffect(() => {
-        console.log("selectedSolution changed:", selectedSolution);
-    }, [selectedSolution]);
 
     return (
         <div>
