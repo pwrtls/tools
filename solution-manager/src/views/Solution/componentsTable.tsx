@@ -1,78 +1,81 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
-import { Button, Table, Modal, Progress, message, Space } from 'antd';
+import { Button, Table, Modal, Progress, message, Space, Popconfirm } from 'antd';
 import { usePowerToolsApi } from 'powertools/apiHook';
 import { useSolutionComponentColumns } from 'utils/columns';
 import { IoDataResponse } from 'models/oDataResponse';
 import { ISolutionComponentSummary } from 'models/solutionComponentSummary';
 import { ISolution } from 'models/solutions';
+import { useComponentOperations } from './hooks/useComponentOperations';
+import { useSolutionFetching } from './hooks/useSolutionFetching';
 
 export const ComponentsTable: React.FC<{ solutionId?: string }> = (props) => {
     const { get, post } = usePowerToolsApi();
     const [isLoadingComponents, setLoadingComponents] = useState(true);
-    const [isLoadingMore, setLoadingMore] = useState(false);
-    const [skipToken, setSkipToken] = useState('');
     const [components, setComponents] = useState<ISolutionComponentSummary[]>([]);
     const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([]);
-    const [unmanagedSolutions, setUnmanagedSolutions] = useState<ISolution[]>([]);
     const [isModalVisible, setIsModalVisible] = useState(false);
     const [copying, setCopying] = useState(false);
     const [progress, setProgress] = useState(0);
     const [operationDebugInfo, setOperationDebugInfo] = useState<string[]>([]);
 
-    const endpoint = 'api/data/v9.2/';
-    const customHeaders = useMemo(() => ({
-        "Content-Type": "application/json"
-    }), []);
+    const { copyToComponents, deleteComponents } = useComponentOperations(
+        post, 
+        components, 
+        selectedRowKeys, 
+        setProgress, 
+        setOperationDebugInfo,
+        setCopying  // Pass setCopying to the hook
+    );
+    const { unmanagedSolutions, fetchUnmanagedSolutions } = useSolutionFetching(get);
 
-    const copyToComponents = useCallback(async (solutionName: string) => {
-        if (!post) {
-            message.error('Copy function is not available');
-            return;
-        }
-        if (!solutionName) {
-            message.error('No solution selected for copying');
-            setCopying(false);
-            return;
-        }
+    const loadSolutionComponents = useCallback(async () => {
+        if (!get || !props.solutionId) return;
 
-        setProgress(0);
-        setOperationDebugInfo(['Starting copy process']);
+        try {
+            setLoadingComponents(true);
+            const query = new URLSearchParams({
+                $filter: `(msdyn_solutionid eq ${props.solutionId})`,
+                $orderby: 'msdyn_name asc'
+            });
 
-        const totalComponents = selectedRowKeys.length;
-        let copiedComponents = 0;
+            const res = await get('/api/data/v9.0/msdyn_solutioncomponentsummaries', query);
+            const js = await res.asJson<IoDataResponse<ISolutionComponentSummary>>();
 
-        for (const componentKey of selectedRowKeys) {
-            const component = components.find(comp => comp.msdyn_objectid === componentKey);
-            if (component) {
-                try {
-                    await post(endpoint + 'AddSolutionComponent', {
-                        "ComponentId": componentKey,
-                        "ComponentType": component.msdyn_componenttype.toString(),
-                        "SolutionUniqueName": solutionName,
-                        "AddRequiredComponents": 'false'
-                    }, customHeaders);
-
-                    copiedComponents++;
-                    const newProgress = Math.round((copiedComponents / totalComponents) * 100);
-                    setProgress(newProgress);
-                    setOperationDebugInfo(prev => [...prev, `Copied component ${copiedComponents}/${totalComponents}`]);
-                    
-                    await new Promise(resolve => setTimeout(resolve, 10));
-                } catch (error) {
-                    setOperationDebugInfo(prev => [...prev, `Failed to copy component: ${componentKey}`]);
-                }
+            if (js && Array.isArray(js.value)) {
+                setComponents(js.value);
             }
+        } catch (error) {
+            console.error('Failed to load solution components:', error);
+            message.error('Failed to load solution components');
+        } finally {
+            setLoadingComponents(false);
         }
+    }, [get, props.solutionId]);
 
-        message.success('Components copied successfully');
-        setCopying(false);
-    }, [post, selectedRowKeys, components, customHeaders]);
+    useEffect(() => {
+        loadSolutionComponents();
+    }, [loadSolutionComponents]);
 
     const handleSolutionSelection = useCallback((solutionName: string) => {
         setCopying(true);
         setIsModalVisible(false);
         copyToComponents(solutionName);
     }, [copyToComponents]);
+
+    const showUnmanagedSolutionsModal = useCallback(async () => {
+        await fetchUnmanagedSolutions();
+        setIsModalVisible(true);
+    }, [fetchUnmanagedSolutions]);
+
+    const handleDeleteComponents = useCallback(() => {
+        deleteComponents().then(() => {
+            message.success('Components deleted successfully');
+            loadSolutionComponents();
+        }).catch((error: Error) => {
+            console.error('Failed to delete components:', error);
+            message.error('Failed to delete components');
+        });
+    }, [deleteComponents, loadSolutionComponents]);
 
     const solutionColumns = useMemo(() => [
         {
@@ -94,81 +97,25 @@ export const ComponentsTable: React.FC<{ solutionId?: string }> = (props) => {
             title: 'Publisher',
             dataIndex: 'publisherid',
             key: 'publisherid',
-            render: (publisher: any) => publisher?.name || 'N/A',
+            render: (publisher: { name: string }) => publisher?.name || 'N/A',
         },
         {
             title: 'Action',
             key: 'action',
-            render: (text: string, record: ISolution) => (
+            render: (_: unknown, record: ISolution) => (
                 <Button onClick={() => handleSolutionSelection(record.uniquename)}>Select</Button>
             ),
         },
     ], [handleSolutionSelection]);
 
-    const loadSolutionComponents = async (skipTokenValue?: string) => {
-        if (!get || !post) {
-            return;
-        }
-
-        const query = new URLSearchParams();
-        query.set(`$filter`, `(msdyn_solutionid eq ${props.solutionId})`);
-        query.set(`$orderby`, `msdyn_name asc`);
-
-        if (skipTokenValue) {
-            query.set('$skiptoken', skipTokenValue);
-        }
-
-        const res = await get('/api/data/v9.0/msdyn_solutioncomponentsummaries', query);
-        const js = await res.asJson<IoDataResponse<ISolutionComponentSummary>>();
-
-        if (!js || !Array.isArray(js.value)) {
-            return;
-        }
-
-        const paginationToken = await res.getSkipToken();
-        setSkipToken(paginationToken);
-
-        setComponents(js.value);
-    };
-
-    useEffect(() => {
-        if (!get || !props.solutionId) {
-            return;
-        }
-
-        setLoadingComponents(true);
-
-        loadSolutionComponents().then(() => setLoadingComponents(false));
-
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [get, props.solutionId]);
-
-    const loadMore = () => {
-        setLoadingMore(true);
-
-        Promise.all([loadSolutionComponents(skipToken)]).then(() => setLoadingMore(false));
-    };
-
-    const footer = (data: readonly ISolutionComponentSummary[]) => {
-        if (!Array.isArray(data) || data.length === 0 || !skipToken || isLoadingComponents) {
-            return null;
-        }
-
-        return (
-            <Button onClick={loadMore} disabled={isLoadingMore} loading={isLoadingMore}>Load more</Button>
-        );
-    };
-
-    const handleRowClick = (record: ISolutionComponentSummary) => {
+    const handleRowClick = useCallback((record: ISolutionComponentSummary) => {
         const key = record.msdyn_objectid;
-        const index = selectedRowKeys.indexOf(key);
-
-        if (index >= 0) {
-            setSelectedRowKeys(prevKeys => prevKeys.filter(k => k !== key));
-        } else {
-            setSelectedRowKeys(prevKeys => [...prevKeys, key]);
-        }
-    };
+        setSelectedRowKeys(prevKeys => 
+            prevKeys.includes(key) 
+                ? prevKeys.filter(k => k !== key)
+                : [...prevKeys, key]
+        );
+    }, []);
 
     const rowSelection = {
         selectedRowKeys,
@@ -177,79 +124,7 @@ export const ComponentsTable: React.FC<{ solutionId?: string }> = (props) => {
         },
     };
 
-    const fetchUnmanagedSolutions = useCallback(async (): Promise<ISolution[]> => {
-        if (!get) {
-            return [];
-        }
-    
-        const query = new URLSearchParams();
-        query.set('$select', 'friendlyname,uniquename,version,publisherid');
-        query.set('$filter', '(isvisible eq true) and (ismanaged eq false)');
-        query.set('$orderby', 'friendlyname asc');
-        query.set('$expand', 'publisherid');
-    
-        try {
-            const res = await get(`${endpoint + 'solutions'}?${query.toString()}`);
-            const js = await res.asJson<IoDataResponse<ISolution>>();
-            return js.value;
-        } catch (error) {
-            console.error("Error fetching unmanaged solutions:", error);
-            return [];
-        }
-    }, [get]);
-
-    useEffect(() => {
-        const loadUnmanagedSolutions = async () => {
-            const fetchedSolutions = await fetchUnmanagedSolutions();
-            setUnmanagedSolutions(fetchedSolutions);
-        };
-
-        loadUnmanagedSolutions();
-    }, [fetchUnmanagedSolutions]);
-
-    const showUnmanagedSolutionsModal = async () => {
-        const fetchedSolutions = await fetchUnmanagedSolutions();
-        setUnmanagedSolutions(fetchedSolutions);
-        setIsModalVisible(true);
-    };
-
-    const deleteComponents = () => {
-        if (!get) {
-            return;
-        }
-
-        get(endpoint + 'solutions?$select=uniquename&$filter=solutionid eq ' + props.solutionId).then(function success(result) {
-            console.log(result);
-            const solutionUniqueName = 'test';
-
-            for (const componentKey of selectedRowKeys) {
-                const component = components.find(comp => comp.msdyn_objectid === componentKey);
-                if (component) {
-                    if (post) {
-                        post(endpoint + 'RemoveSolutionComponent', {
-                            "ComponentId": '{' + componentKey + '}',
-                            "ComponentType": component.msdyn_componenttype.toString(),
-                            "SolutionUniqueName": solutionUniqueName
-                        }, customHeaders);
-                    }
-                }
-            }
-        });
-    };
-
-    useEffect(() => {
-        if (copying && progress === 100) {
-            const timer = setTimeout(() => {
-                setCopying(false);
-                setProgress(0);
-                setOperationDebugInfo([]);
-            }, 1000);
-
-            return () => clearTimeout(timer);
-        }
-    }, [copying, progress]);
-
-    const ActionButtons = () => (
+    const ActionButtons = useMemo(() => () => (
         <Space size="middle" style={{
             display: 'flex',
             justifyContent: 'flex-end',
@@ -261,18 +136,26 @@ export const ComponentsTable: React.FC<{ solutionId?: string }> = (props) => {
             <Button 
                 onClick={showUnmanagedSolutionsModal}
                 disabled={selectedRowKeys.length < 1}
+                aria-label="Copy selected components to another solution"
             >
                 Copy to Solution
             </Button>
-            <Button 
-                danger 
-                onClick={deleteComponents}
-                disabled={selectedRowKeys.length < 1}
+            <Popconfirm
+                title="Are you sure you want to delete these components?"
+                onConfirm={handleDeleteComponents}
+                okText="Yes"
+                cancelText="No"
             >
-                Remove from Solution
-            </Button>
+                <Button 
+                    danger 
+                    disabled={selectedRowKeys.length < 1}
+                    aria-label="Remove selected components from solution"
+                >
+                    Remove from Solution
+                </Button>
+            </Popconfirm>
         </Space>
-    );
+    ), [selectedRowKeys, showUnmanagedSolutionsModal, handleDeleteComponents]);
 
     return (
         <div>
@@ -320,8 +203,7 @@ export const ComponentsTable: React.FC<{ solutionId?: string }> = (props) => {
                 columns={useSolutionComponentColumns(props.solutionId)}
                 dataSource={components}
                 rowKey="msdyn_objectid"
-                pagination={false}
-                footer={footer}
+                pagination={{ pageSize: 50 }}
                 rowClassName={() => 'pointer-cursor'}
                 onRow={(record) => ({
                     onClick: () => handleRowClick(record),
@@ -330,4 +212,4 @@ export const ComponentsTable: React.FC<{ solutionId?: string }> = (props) => {
             />
         </div>
     );
-}
+};
