@@ -28,9 +28,7 @@ export const ParentComponent: React.FC = () => {
     return (
         <div>
             <h1>Parent Component</h1>
-            <ErrorBoundary>
-                <SolutionCopy sourceSolutionId="source-id" targetSolutionId="target-id" />
-            </ErrorBoundary>
+            <SolutionCopy sourceSolutionId="source-id" targetSolutionId="target-id" />
         </div>
     );
 };

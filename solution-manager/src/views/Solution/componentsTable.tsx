@@ -27,8 +27,14 @@ export const ComponentsTable: React.FC<{ solutionId?: string }> = (props) => {
         "Content-Type": "application/json"
     }), []);
 
-    const copyToComponents = useCallback(async () => {
-        if (!post || !selectedSolution) {
+    const copyToComponents = useCallback(async (solutionName: string) => {
+        if (!post) {
+            message.error('Copy function is not available');
+            return;
+        }
+        if (!solutionName) {
+            message.error('No solution selected for copying');
+            setCopying(false);
             return;
         }
 
@@ -45,7 +51,7 @@ export const ComponentsTable: React.FC<{ solutionId?: string }> = (props) => {
                     await post(endpoint + 'AddSolutionComponent', {
                         "ComponentId": componentKey,
                         "ComponentType": component.msdyn_componenttype.toString(),
-                        "SolutionUniqueName": selectedSolution,
+                        "SolutionUniqueName": solutionName,
                         "AddRequiredComponents": 'false'
                     }, customHeaders);
 
@@ -63,16 +69,13 @@ export const ComponentsTable: React.FC<{ solutionId?: string }> = (props) => {
 
         message.success('Components copied successfully');
         setCopying(false);
-    }, [post, selectedSolution, selectedRowKeys, components, customHeaders]);
+    }, [post, selectedRowKeys, components, customHeaders]);
 
     const handleSolutionSelection = useCallback((solutionName: string) => {
         setSelectedSolution(solutionName);
         setCopying(true);
         setIsModalVisible(false);
-
-        setTimeout(() => {
-            copyToComponents();
-        }, 0);
+        copyToComponents(solutionName);
     }, [copyToComponents]);
 
     const solutionColumns = useMemo(() => [
@@ -250,7 +253,6 @@ export const ComponentsTable: React.FC<{ solutionId?: string }> = (props) => {
         }
     }, [copying, progress]);
 
-    // Add this new component for the action buttons
     const ActionButtons = () => (
         <Space size="middle" style={{
             display: 'flex',
@@ -275,6 +277,10 @@ export const ComponentsTable: React.FC<{ solutionId?: string }> = (props) => {
             </Button>
         </Space>
     );
+
+    useEffect(() => {
+        console.log("selectedSolution changed:", selectedSolution);
+    }, [selectedSolution]);
 
     return (
         <div>
