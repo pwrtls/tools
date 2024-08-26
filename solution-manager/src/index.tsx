@@ -4,7 +4,8 @@ import ReactDOM from 'react-dom/client';
 import { ConfigProvider } from 'antd';
 import enUS from 'antd/es/locale/en_US';
 
-import './index.css';
+// Remove the CSS import and add this line:
+import { StyleProvider } from '@ant-design/cssinjs';
 
 import { AppRouter } from './AppRouter';
 
@@ -13,7 +14,9 @@ const root = ReactDOM.createRoot(document.getElementById('root') as HTMLElement)
 root.render(
     <React.StrictMode>
         <ConfigProvider locale={enUS}>
-            <AppRouter />
+            <StyleProvider hashPriority="high">
+                <AppRouter />
+            </StyleProvider>
         </ConfigProvider>
     </React.StrictMode>
 );

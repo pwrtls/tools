@@ -4,11 +4,10 @@ import { ColumnsType } from 'antd/lib/table';
 import { ISolution } from 'models/solutions';
 import { ISolutionComponentSummary } from 'models/solutionComponentSummary';
 
-import { SolutionComponentActionButton, ViewSolutionDetailsButton } from './buttons';
+import { SolutionComponentActionButton } from './buttons';
 import { SolutionInfo } from './info';
-import { Button } from 'antd';
 
-import { usePowerToolsApi } from 'powertools/apiHook';
+import { useMemo } from 'react';
 
 export const solutionsColumns: ColumnsType<ISolution> = [
     {
@@ -31,14 +30,8 @@ export const solutionsColumns: ColumnsType<ISolution> = [
     }*/,
 ];
 
-const endpoint = '/api/data/v9.2/';
-const customHeaders = {
-    "Content-Type": "application/json"
-};
-
 export const useSolutionComponentColumns = (solutionId?: string) => {
-    const { get, post } = usePowerToolsApi();
-    const solutionComponentColumns: ColumnsType<ISolutionComponentSummary> = [
+    return useMemo(() => [
         { title: 'Display Name', dataIndex: 'msdyn_displayname', key: 'displayName', ellipsis: true, render: (value?: string) => value || '-' },
         { title: 'Name', dataIndex: 'msdyn_name', key: 'name', ellipsis: true, render: (value?: string) => value || '-' },
         { title: 'Type', dataIndex: 'msdyn_componentlogicalname', key: 'type' },
@@ -48,15 +41,13 @@ export const useSolutionComponentColumns = (solutionId?: string) => {
         { title: 'Modified', dataIndex: 'msdyn_modifiedon', key: 'modified', render: (value?: string) => value ? moment(value).fromNow() : '-' },
         {
             title: 'Actions', key: 'actions',
-            render: (v, record) =>
+            render: (_: unknown, record: ISolutionComponentSummary) =>
                 <SolutionComponentActionButton
                     solutionId={solutionId}
                     component={record}
                 />,
         }
-    ];
-
-    return solutionComponentColumns;
+    ], [solutionId]);
 }
 
 export const solutionHistoryColumns: ColumnsType<any> = [
@@ -67,3 +58,12 @@ export const solutionHistoryColumns: ColumnsType<any> = [
     { title: 'Suboperation', key: 'suboperation', render: (v, record) => record['suboperation@OData.Community.Display.V1.FormattedValue'] || '-' },
     { title: 'Publisher', dataIndex: 'publishername', key: 'publishername' },
 ];
+
+// Remove this function if it's not used elsewhere
+// export const useColumns = () => {
+//     const { get, post } = usePowerToolsApi();
+    
+//     return useMemo(() => [
+//         // ... existing code ...
+//     ], []);
+// }

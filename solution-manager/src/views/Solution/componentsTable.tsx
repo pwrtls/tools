@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Button, Table, Modal } from 'antd';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import { Button, Table, Modal, Progress, message, Space } from 'antd';
 
 import { usePowerToolsApi } from 'powertools/apiHook';
 import { useSolutionComponentColumns } from 'utils/columns';
@@ -18,7 +18,64 @@ export const ComponentsTable: React.FC<{ solutionId?: string }> = (props) => {
     const [unmanagedSolutions, setUnmanagedSolutions] = useState<ISolution[]>([]);
     const [selectedSolution, setSelectedSolution] = useState<string>('');
     const [isModalVisible, setIsModalVisible] = useState(false);
-    const solutionColumns = [
+    const [copying, setCopying] = useState(false);
+    const [progress, setProgress] = useState(0);
+    const [operationDebugInfo, setOperationDebugInfo] = useState<string[]>([]);
+
+    const endpoint = 'api/data/v9.2/';
+    const customHeaders = useMemo(() => ({
+        "Content-Type": "application/json"
+    }), []);
+
+    const copyToComponents = useCallback(async () => {
+        if (!post || !selectedSolution) {
+            return;
+        }
+
+        setProgress(0);
+        setOperationDebugInfo(['Starting copy process']);
+
+        const totalComponents = selectedRowKeys.length;
+        let copiedComponents = 0;
+
+        for (const componentKey of selectedRowKeys) {
+            const component = components.find(comp => comp.msdyn_objectid === componentKey);
+            if (component) {
+                try {
+                    await post(endpoint + 'AddSolutionComponent', {
+                        "ComponentId": componentKey,
+                        "ComponentType": component.msdyn_componenttype.toString(),
+                        "SolutionUniqueName": selectedSolution,
+                        "AddRequiredComponents": 'false'
+                    }, customHeaders);
+
+                    copiedComponents++;
+                    const newProgress = Math.round((copiedComponents / totalComponents) * 100);
+                    setProgress(newProgress);
+                    setOperationDebugInfo(prev => [...prev, `Copied component ${copiedComponents}/${totalComponents}`]);
+                    
+                    await new Promise(resolve => setTimeout(resolve, 10));
+                } catch (error) {
+                    setOperationDebugInfo(prev => [...prev, `Failed to copy component: ${componentKey}`]);
+                }
+            }
+        }
+
+        message.success('Components copied successfully');
+        setCopying(false);
+    }, [post, selectedSolution, selectedRowKeys, components, customHeaders]);
+
+    const handleSolutionSelection = useCallback((solutionName: string) => {
+        setSelectedSolution(solutionName);
+        setCopying(true);
+        setIsModalVisible(false);
+
+        setTimeout(() => {
+            copyToComponents();
+        }, 0);
+    }, [copyToComponents]);
+
+    const solutionColumns = useMemo(() => [
         {
             title: 'Friendly Name',
             dataIndex: 'friendlyname',
@@ -38,7 +95,7 @@ export const ComponentsTable: React.FC<{ solutionId?: string }> = (props) => {
             title: 'Publisher',
             dataIndex: 'publisherid',
             key: 'publisherid',
-            render: (publisher: any) => publisher?.name || 'N/A', // Assuming publisher object has a name property
+            render: (publisher: any) => publisher?.name || 'N/A',
         },
         {
             title: 'Action',
@@ -47,7 +104,7 @@ export const ComponentsTable: React.FC<{ solutionId?: string }> = (props) => {
                 <Button onClick={() => handleSolutionSelection(record.uniquename)}>Select</Button>
             ),
         },
-    ];
+    ], [handleSolutionSelection]);
 
     const loadSolutionComponents = async (skipTokenValue?: string) => {
         if (!get || !post) {
@@ -72,7 +129,6 @@ export const ComponentsTable: React.FC<{ solutionId?: string }> = (props) => {
         const paginationToken = await res.getSkipToken();
         setSkipToken(paginationToken);
 
-        console.log(js);
         setComponents(js.value);
     };
 
@@ -109,10 +165,8 @@ export const ComponentsTable: React.FC<{ solutionId?: string }> = (props) => {
         const index = selectedRowKeys.indexOf(key);
 
         if (index >= 0) {
-            // If the key exists, remove it from the selected keys
             setSelectedRowKeys(prevKeys => prevKeys.filter(k => k !== key));
         } else {
-            // Otherwise, add the key to the selected keys
             setSelectedRowKeys(prevKeys => [...prevKeys, key]);
         }
     };
@@ -123,21 +177,8 @@ export const ComponentsTable: React.FC<{ solutionId?: string }> = (props) => {
             setSelectedRowKeys(selectedKeys as string[]);
         },
     };
-    const endpoint = 'api/data/v9.2/';
-    const customHeaders = {
-        "Content-Type": "application/json"
-    };
 
-    useEffect(() => {
-        const loadUnmanagedSolutions = async () => {
-            const fetchedSolutions = await fetchUnmanagedSolutions();
-            setUnmanagedSolutions(fetchedSolutions);
-        };
-
-        loadUnmanagedSolutions();
-    }, []);
-
-    const fetchUnmanagedSolutions = async (): Promise<ISolution[]> => {
+    const fetchUnmanagedSolutions = useCallback(async (): Promise<ISolution[]> => {
         if (!get) {
             return [];
         }
@@ -146,7 +187,7 @@ export const ComponentsTable: React.FC<{ solutionId?: string }> = (props) => {
         query.set('$select', 'friendlyname,uniquename,version,publisherid');
         query.set('$filter', '(isvisible eq true) and (ismanaged eq false)');
         query.set('$orderby', 'friendlyname asc');
-        query.set('$expand', 'publisherid'); // To fetch publisher details
+        query.set('$expand', 'publisherid');
     
         try {
             const res = await get(`${endpoint + 'solutions'}?${query.toString()}`);
@@ -156,37 +197,21 @@ export const ComponentsTable: React.FC<{ solutionId?: string }> = (props) => {
             console.error("Error fetching unmanaged solutions:", error);
             return [];
         }
-    };
-    
+    }, [get]);
+
+    useEffect(() => {
+        const loadUnmanagedSolutions = async () => {
+            const fetchedSolutions = await fetchUnmanagedSolutions();
+            setUnmanagedSolutions(fetchedSolutions);
+        };
+
+        loadUnmanagedSolutions();
+    }, [fetchUnmanagedSolutions]);
 
     const showUnmanagedSolutionsModal = async () => {
         const fetchedSolutions = await fetchUnmanagedSolutions();
         setUnmanagedSolutions(fetchedSolutions);
         setIsModalVisible(true);
-    };
-
-    const handleSolutionSelection = (solutionName: string) => {
-        setSelectedSolution(solutionName);
-        moveToComponents();
-        setIsModalVisible(false); // Close the modal after moving the component
-    };
-
-    const moveToComponents = () => {
-        if (!post || !selectedSolution) {
-            return;
-        }
-
-        for (const componentKey of selectedRowKeys) {
-            const component = components.find(comp => comp.msdyn_objectid === componentKey);
-            if (component) {
-                post(endpoint + 'AddSolutionComponent', {
-                    "ComponentId": componentKey,
-                    "ComponentType": component.msdyn_componenttype.toString(),
-                    "SolutionUniqueName": selectedSolution,
-                    "AddRequiredComponents": 'false'
-                }, customHeaders);
-            }
-        }
     };
 
     const deleteComponents = () => {
@@ -196,8 +221,7 @@ export const ComponentsTable: React.FC<{ solutionId?: string }> = (props) => {
 
         get(endpoint + 'solutions?$select=uniquename&$filter=solutionid eq ' + props.solutionId).then(function success(result) {
             console.log(result);
-            const data = JSON.parse(result.content);
-            const solutionUniqueName = 'test'; // or use: data.value[0].uniquename
+            const solutionUniqueName = 'test';
 
             for (const componentKey of selectedRowKeys) {
                 const component = components.find(comp => comp.msdyn_objectid === componentKey);
@@ -214,17 +238,52 @@ export const ComponentsTable: React.FC<{ solutionId?: string }> = (props) => {
         });
     };
 
+    useEffect(() => {
+        if (copying && progress === 100) {
+            const timer = setTimeout(() => {
+                setCopying(false);
+                setProgress(0);
+                setOperationDebugInfo([]);
+            }, 1000);
+
+            return () => clearTimeout(timer);
+        }
+    }, [copying, progress]);
+
+    // Add this new component for the action buttons
+    const ActionButtons = () => (
+        <Space size="middle" style={{
+            display: 'flex',
+            justifyContent: 'flex-end',
+            marginBottom: 16,
+            opacity: selectedRowKeys.length > 0 ? 1 : 0.3,
+            transition: 'opacity 0.3s',
+            pointerEvents: selectedRowKeys.length > 0 ? 'auto' : 'none',
+        }}>
+            <Button 
+                onClick={showUnmanagedSolutionsModal}
+                disabled={selectedRowKeys.length < 1}
+            >
+                Copy to Solution
+            </Button>
+            <Button 
+                danger 
+                onClick={deleteComponents}
+                disabled={selectedRowKeys.length < 1}
+            >
+                Remove from Solution
+            </Button>
+        </Space>
+    );
+
     return (
         <div>
-            <Button onClick={showUnmanagedSolutionsModal} disabled={selectedRowKeys.length < 1}>Move to Solution</Button>
-            <Button onClick={deleteComponents} disabled={selectedRowKeys.length < 1}>Remove from Solution</Button>
-
             <Modal
                 title="Select an Unmanaged Solution"
-                visible={isModalVisible}
+                open={isModalVisible}
                 onCancel={() => setIsModalVisible(false)}
                 footer={null}
-                width={800} // Adjust width as needed
+                width={800}
             >
                 <Table
                     dataSource={unmanagedSolutions}
@@ -233,6 +292,30 @@ export const ComponentsTable: React.FC<{ solutionId?: string }> = (props) => {
                     pagination={false}
                 />
             </Modal>
+
+            <Modal
+                title="Copying Solution Components"
+                open={copying}
+                footer={[
+                    <Button key="close" onClick={() => setCopying(false)}>
+                        Close
+                    </Button>
+                ]}
+                closable={true}
+                maskClosable={false}
+                onCancel={() => setCopying(false)}
+            >
+                <Progress percent={progress} status="active" />
+                <p>Progress: {progress}%</p>
+                <p>Debug Info:</p>
+                <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                    {operationDebugInfo.map((info, index) => (
+                        <div key={index}>{info}</div>
+                    ))}
+                </div>
+            </Modal>
+
+            <ActionButtons />
 
             <Table<ISolutionComponentSummary>
                 loading={isLoadingComponents}

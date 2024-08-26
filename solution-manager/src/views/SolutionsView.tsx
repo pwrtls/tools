@@ -1,5 +1,5 @@
-import React, { useContext, useEffect, useState } from 'react';
-import { Spin, Table } from 'antd';
+import React, { useContext, useEffect, useState, useMemo } from 'react';
+import { Spin, Table, message } from 'antd';
 
 import { IoDataResponse } from 'models/oDataResponse';
 import { ISolution } from 'models/solutions';
@@ -20,30 +20,35 @@ export const SolutionsView: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [solutions, setSolutions] = useState<ISolution[]>([]);
 
-    useEffect(() => {
-        setLoading(true);
-        if (!get) {
-            return;
+    const loadSolutions = async (): Promise<void> => {
+        const query = new URLSearchParams();
+        query.set('$select', 'friendlyname,uniquename,version,ismanaged,modifiedon');
+        query.set('$expand', 'publisherid');
+        query.set('$filter', '(isvisible eq true)');
+        query.set('$orderby', 'modifiedon desc');
+
+        try {
+            const response = await window.PowerTools.get(`${API_ENDPOINT}?${query.toString()}`);
+            const data = await response.asJson<IoDataResponse<ISolution>>();
+            setSolutions(data.value);
+        } catch (error) {
+            console.error("Error fetching solutions:", error);
+            throw error;
         }
+    };
 
-        const loadSolutions = () => {
-            const query = new URLSearchParams();
-            query.set('$select', 'friendlyname,uniquename,version,ismanaged,modifiedon');
-            query.set('$expand', 'publisherid');
-            query.set('$filter', '(isvisible eq true)');
-            query.set('$orderby', 'modifiedon desc');
+    useEffect(() => {
+        if (!get) return;
 
-            return get(`${API_ENDPOINT}?${query.toString()}`)
-                .then(res => res.asJson<IoDataResponse<ISolution>>())
-                .then(js => setSolutions(js.value))
-                .catch(error => {
-                    console.error("Error fetching solutions:", error);
-                    // Handle the error appropriately, e.g., show a notification or set an error state
-                });
-        };
-
-        loadSolutions().then(() => setLoading(false));
-    }, [connectionName]);
+        setLoading(true);
+        loadSolutions()
+            .then(() => setLoading(false))
+            .catch((error: Error) => {
+                console.error("Error fetching solutions:", error);
+                setLoading(false);
+                message.error('Failed to load solutions');
+            });
+    }, [get, connectionName]);
 
     const navigate = useNavigate();
 
@@ -51,12 +56,14 @@ export const SolutionsView: React.FC = () => {
         navigate(`/${solutionId}`);
     };
 
+    const memoizedSolutions = useMemo(() => solutions, [solutions]);
+
     return (
         <Spin spinning={loading}>
             <Table
                 columns={solutionsColumns}
                 loading={loading}
-                dataSource={solutions}
+                dataSource={memoizedSolutions}
                 rowKey="solutionid"
                 onRow={(record) => ({
                     onClick: () => onViewClick(record.solutionid),

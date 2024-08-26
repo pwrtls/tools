@@ -30,27 +30,31 @@ export const SolutionDetails: React.FC = () => {
         const loadSolution = async () => { 
             setLoading(true); 
             
-            const query = new URLSearchParams(); 
-            query.set(`$expand`, `publisherid`); 
-            query.set(`$filter`, `(solutionid eq ${ solutionId })`); 
+            try {
+                const query = new URLSearchParams(); 
+                query.set(`$expand`, `publisherid`); 
+                query.set(`$filter`, `(solutionid eq ${ solutionId })`); 
 
-            const res = await get('/api/data/v9.0/solutions', query); 
-            const js = await res.asJson<IoDataResponse<ISolution>>(); 
-            
-            if (!js || !Array.isArray(js.value)) { 
-                return; 
-            } 
-            
-            if (js.value.length !== 1) { 
-                return; 
-            } 
-            
-            console.log(js.value[0]); 
-            
-            setSolution(js.value[0]); 
+                const res = await get('/api/data/v9.0/solutions', query); 
+                const js = await res.asJson<IoDataResponse<ISolution>>(); 
+                
+                if (!js || !Array.isArray(js.value)) { 
+                    return; 
+                } 
+                
+                if (js.value.length !== 1) { 
+                    return; 
+                }            
+                setSolution(js.value[0]); 
+            } catch (error) {
+                console.error('Failed to load solution:', error);
+                // Consider adding error state and displaying to user
+            } finally {
+                setLoading(false);
+            }
         }; 
         
-        loadSolution().then(() => setLoading(false)); 
+        loadSolution(); 
     }, [get, solutionId]); 
     
     return ( 
