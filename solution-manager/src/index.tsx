@@ -1,7 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 
-import { ConfigProvider } from 'antd';
+import { ConfigProvider, App as AntApp } from 'antd';
 import enUS from 'antd/es/locale/en_US';
 import { StyleProvider } from '@ant-design/cssinjs';
 
@@ -13,7 +13,9 @@ root.render(
     <React.StrictMode>
         <ConfigProvider locale={enUS}>
             <StyleProvider hashPriority="high">
-                <AppRouter />
+                <AntApp>
+                    <AppRouter />
+                </AntApp>
             </StyleProvider>
         </ConfigProvider>
     </React.StrictMode>

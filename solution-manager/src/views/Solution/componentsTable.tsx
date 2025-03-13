@@ -8,8 +8,14 @@ import { ISolution } from 'models/solutions';
 import { useComponentOperations } from './hooks/useComponentOperations';
 import { useSolutionFetching } from './hooks/useSolutionFetching';
 
-export const ComponentsTable: React.FC<{ solutionId?: string }> = (props) => {
+interface ComponentsTableProps {
+    solutionId?: string;
+    onComponentSelect?: (component: ISolutionComponentSummary) => React.ReactNode;
+}
+
+export const ComponentsTable: React.FC<ComponentsTableProps> = (props) => {
     const { get, post } = usePowerToolsApi();
+    const { solutionId, onComponentSelect } = props;
     const [isLoadingComponents, setLoadingComponents] = useState(true);
     const [components, setComponents] = useState<ISolutionComponentSummary[]>([]);
     const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([]);
@@ -29,12 +35,12 @@ export const ComponentsTable: React.FC<{ solutionId?: string }> = (props) => {
     const { unmanagedSolutions, fetchUnmanagedSolutions } = useSolutionFetching(get);
 
     const loadSolutionComponents = useCallback(async () => {
-        if (!get || !props.solutionId) return;
+        if (!get || !solutionId) return;
 
         try {
             setLoadingComponents(true);
             const query = new URLSearchParams({
-                $filter: `(msdyn_solutionid eq ${props.solutionId})`,
+                $filter: `(msdyn_solutionid eq ${solutionId})`,
                 $orderby: 'msdyn_name asc'
             });
 
@@ -50,7 +56,7 @@ export const ComponentsTable: React.FC<{ solutionId?: string }> = (props) => {
         } finally {
             setLoadingComponents(false);
         }
-    }, [get, props.solutionId]);
+    }, [get, solutionId]);
 
     useEffect(() => {
         loadSolutionComponents();
@@ -109,13 +115,18 @@ export const ComponentsTable: React.FC<{ solutionId?: string }> = (props) => {
     ], [handleSolutionSelection]);
 
     const handleRowClick = useCallback((record: ISolutionComponentSummary) => {
+        if (onComponentSelect) {
+            // If we have an onComponentSelect handler, use it
+            return onComponentSelect(record);
+        }
+        // Otherwise use the default selection behavior
         const key = record.msdyn_objectid;
         setSelectedRowKeys(prevKeys => 
             prevKeys.includes(key) 
                 ? prevKeys.filter(k => k !== key)
                 : [...prevKeys, key]
         );
-    }, []);
+    }, [onComponentSelect]);
 
     const rowSelection = {
         selectedRowKeys,
@@ -200,7 +211,7 @@ export const ComponentsTable: React.FC<{ solutionId?: string }> = (props) => {
 
             <Table<ISolutionComponentSummary>
                 loading={isLoadingComponents}
-                columns={useSolutionComponentColumns(props.solutionId)}
+                columns={useSolutionComponentColumns(solutionId)}
                 dataSource={components}
                 rowKey="msdyn_objectid"
                 pagination={{ pageSize: 50 }}

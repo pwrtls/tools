@@ -63,12 +63,10 @@ export const SolutionComponentActionButton: React.FC<ISolutionComponentActionBut
         }
     };
 
-    const menu = (
-        <Menu
-            onClick={onMenuClick}
-            items={menuItems}
-        />
-    );
+    const menu: MenuProps = {
+        onClick: onMenuClick,
+        items: menuItems
+    };
 
     if (menuItems.length === 0) {
         return (
@@ -77,7 +75,7 @@ export const SolutionComponentActionButton: React.FC<ISolutionComponentActionBut
     }
 
     return (
-        <Dropdown overlay={menu}>
+        <Dropdown menu={menu}>
             <Button size="small">
                 <Space>
                     Actions

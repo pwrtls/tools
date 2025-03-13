@@ -28,11 +28,35 @@ export const SolutionsView: React.FC = () => {
         query.set('$orderby', 'modifiedon desc');
 
         try {
+            console.log('Making API request to:', `${API_ENDPOINT}?${query.toString()}`);
             const response = await window.PowerTools.get(`${API_ENDPOINT}?${query.toString()}`);
+            console.log('Raw API response:', response);
+            
+            // Check for unauthorized response
+            if (response.statusCode === 401) {
+                throw new Error('Unauthorized: Please check your authentication credentials');
+            }
+
+            // Check if response exists and has content
+            if (!response || !response.content) {
+                throw new Error('No content received from API');
+            }
+
             const data = await response.asJson<IoDataResponse<ISolution>>();
+            console.log('Parsed response data:', data);
+            
+            if (!data || !Array.isArray(data.value)) {
+                throw new Error('Invalid response format: expected data.value to be an array');
+            }
+
             setSolutions(data.value);
-        } catch (error) {
-            console.error("Error fetching solutions:", error);
+        } catch (error: any) {
+            console.error("Error details:", {
+                message: error.message,
+                stack: error.stack,
+                response: error.response,
+                statusCode: error.statusCode
+            });
             throw error;
         }
     };
