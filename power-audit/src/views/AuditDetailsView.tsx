@@ -22,12 +22,48 @@ const AuditDetailsView: React.FC = () => {
   const [entityDisplayName, setEntityDisplayName] = useState<string>('');
   const [userName, setUserName] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
+  const [attributeDisplayNames, setAttributeDisplayNames] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (isLoaded && auditId) {
       loadAuditDetails();
     }
   }, [isLoaded, auditId]);
+
+  // Function to fetch display names for all attributes in the audit details
+  const fetchAttributeDisplayNames = async (entityType: string, attributes: string[]) => {
+    console.log(`Fetching display names for ${attributes.length} attributes of entity ${entityType}`);
+    
+    if (!entityType || attributes.length === 0) return {};
+    
+    try {
+      // Use the fetchEntityAttributeDisplayNames function from the audit service
+      const displayNamesMap = await auditService.fetchEntityAttributeDisplayNames(entityType);
+      
+      // Convert map to object for easier React state management
+      const displayNamesObj: Record<string, string> = {};
+      
+      // Process each attribute to get its display name
+      for (const attr of attributes) {
+        if (displayNamesMap.has(attr)) {
+          displayNamesObj[attr] = displayNamesMap.get(attr)!;
+        } else {
+          // Fallback: Format the logical name for display
+          displayNamesObj[attr] = attr;
+        }
+      }
+      
+      console.log('Attribute display names:', displayNamesObj);
+      return displayNamesObj;
+    } catch (error) {
+      console.error('Error fetching attribute display names:', error);
+      // Fallback: Use the logical names as is
+      return attributes.reduce((acc, attr) => {
+        acc[attr] = attr;
+        return acc;
+      }, {} as Record<string, string>);
+    }
+  };
 
   const loadAuditDetails = async () => {
     if (!auditId) return;
@@ -73,7 +109,25 @@ const AuditDetailsView: React.FC = () => {
         // Fetch the audit details
         const detailsResponse = await auditService.fetchAuditDetails(auditId);
         console.log('Found audit details:', detailsResponse.length);
-        setAuditDetails(detailsResponse);
+        
+        if (detailsResponse.length > 0) {
+          setAuditDetails(detailsResponse);
+          
+          // Extract attribute logical names from the details
+          const attributeLogicalNames = detailsResponse.map(detail => 
+            detail.attributemask || detail.attributename
+          ).filter(Boolean) as string[];
+          
+          // Now fetch display names for all these attributes
+          if (logRecord.objecttypecode && attributeLogicalNames.length > 0) {
+            const displayNames = await fetchAttributeDisplayNames(
+              logRecord.objecttypecode,
+              attributeLogicalNames
+            );
+            
+            setAttributeDisplayNames(displayNames);
+          }
+        }
       } else {
         console.log('No audit record found with ID:', auditId);
         setError(`No audit record found with ID: ${auditId}`);
@@ -89,12 +143,32 @@ const AuditDetailsView: React.FC = () => {
   const handleBack = () => {
     navigate('/');
   };
+  
+  // Helper function to get display name for an attribute
+  const getAttributeDisplayName = (attributeName: string): string => {
+    // Try to get from our fetched display names
+    if (attributeDisplayNames[attributeName]) {
+      return attributeDisplayNames[attributeName];
+    }
+    
+    // If attributeName is the logical name but we have attributemask, try that
+    const detail = auditDetails.find(d => d.attributename === attributeName);
+    if (detail?.attributemask && attributeDisplayNames[detail.attributemask]) {
+      return attributeDisplayNames[detail.attributemask];
+    }
+    
+    // Fallback to whatever we have
+    return attributeName;
+  };
 
   const columns = [
     {
       title: 'Attribute',
       dataIndex: 'attributename',
-      key: 'attributename'
+      key: 'attributename',
+      render: (name: string, record: IAuditLogDetails) => {
+        return getAttributeDisplayName(record.attributemask || name);
+      }
     },
     {
       title: 'Old Value',
