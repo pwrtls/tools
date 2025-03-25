@@ -224,11 +224,14 @@ const AuditDetailsView: React.FC = () => {
 
   return (
     <div className="audit-details-view">
-      <Card title="Audit Record Details" bordered={false} extra={
-        <Button type="primary" icon={<ArrowLeftOutlined />} onClick={handleBack}>
-          Back
-        </Button>
-      }>
+      <Card
+        bordered={false}
+        title={
+          <Button type="primary" icon={<ArrowLeftOutlined />} onClick={handleBack}>
+            Back
+          </Button>
+        }
+      >
         <Descriptions title="Audit Information" bordered>
           <Descriptions.Item label="Audit ID">{auditLog.auditid}</Descriptions.Item>
           <Descriptions.Item label="Created On">{dayjs(auditLog.createdon).format('YYYY-MM-DD HH:mm:ss')}</Descriptions.Item>
