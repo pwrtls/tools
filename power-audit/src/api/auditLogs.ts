@@ -687,6 +687,16 @@ export const useAuditLogsService = () => {
                                 isNewField = true;
                                 oldValueFormatted = '[Previously Empty]';
                             }
+                        } else {
+                            // Check for formatted value first
+                            const oldFormattedValueKey = `${key}@OData.Community.Display.V1.FormattedValue`;
+                            if (oldValues[oldFormattedValueKey]) {
+                                oldValueFormatted = oldValues[oldFormattedValueKey];
+                            } else if (entityLogicalName) {
+                                oldValueFormatted = await fetchLookupDisplayName(entityLogicalName, String(oldValue));
+                            } else {
+                                oldValueFormatted = String(oldValue);
+                            }
                         }
                         
                         // Check if we have a formatted value in the new values
