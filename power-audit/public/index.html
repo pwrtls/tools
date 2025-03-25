@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <script src="https://api.powertoolsdev.com/files/api.js"></script>
+    
+    <meta charset="utf-8" />
+    <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#000000" />
+    <meta
+      name="description"
+      content="Power Audit - Microsoft Dynamics 365 / Power Platform Audit Log Explorer"
+    />
+    <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
+    <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
+    <title>Power Audit - Audit Log Explorer</title>
+    <script>
+      // Early PowerTools API detection
+      window.addEventListener('DOMContentLoaded', function() {
+        console.log('EARLY DETECTION: window.PowerTools available:', typeof window.PowerTools !== 'undefined');
+        console.log('EARLY DETECTION: window === window.top:', window === window.top);
+        
+        if (window.PowerTools) {
+          console.log('EARLY DETECTION: PowerTools properties:', Object.keys(window.PowerTools));
+        }
+        
+        // Check every second for PowerTools API
+        let checkCount = 0;
+        const maxChecks = 10;
+        
+        const intervalId = setInterval(function() {
+          checkCount++;
+          console.log(`EARLY DETECTION: Check ${checkCount}/${maxChecks} - PowerTools available:`, typeof window.PowerTools !== 'undefined');
+          
+          if (typeof window.PowerTools !== 'undefined' || checkCount >= maxChecks) {
+            clearInterval(intervalId);
+          }
+        }, 1000);
+      });
+    </script>
+  </head>
+  <body>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div id="root"></div>
+  </body>
+</html> 
