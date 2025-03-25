@@ -930,27 +930,91 @@ export const useAuditLogsService = () => {
         try {
             // Make the API call
             console.log('Exporting audit logs with params:', Object.fromEntries(query.entries()));
-            const response = await get('/api/data/v9.0/audits', query);
-            if (!response) {
-                throw new Error('Empty response from API');
+            
+            // Use PowerToolsUI's built-in download method if available
+            if (window.PowerTools && typeof window.PowerTools.download === 'function') {
+                // First, get the data as JSON
+                const response = await getAsJson<IoDataResponse<IAuditLog>>('/api/data/v9.0/audits', query);
+                
+                if (!response || !response.value || !Array.isArray(response.value)) {
+                    throw new Error('Invalid response format from API');
+                }
+                
+                // Convert the JSON data to CSV
+                const csvData = convertToCSV(response.value);
+                
+                // Generate a filename with current date
+                const dateStr = new Date().toISOString().split('T')[0];
+                const filename = `audit_logs_${dateStr}.csv`;
+                
+                // Call the PowerToolsUI download method directly
+                window.PowerTools.download(csvData, filename, 'text/csv');
+                console.log('Successfully downloaded audit logs as CSV via PowerTools API');
+                return;
             }
             
-            const csvData = await response.asCsv();
-            if (!csvData) {
-                throw new Error('Empty CSV data received');
+            // Fallback for non-PowerTools environment
+            const response = await getAsJson<IoDataResponse<IAuditLog>>('/api/data/v9.0/audits', query);
+            
+            if (!response || !response.value || !Array.isArray(response.value)) {
+                throw new Error('Invalid response format from API');
             }
+            
+            // Convert the JSON data to CSV
+            const csvData = convertToCSV(response.value);
             
             // Generate a filename with current date
             const dateStr = new Date().toISOString().split('T')[0];
             const filename = `audit_logs_${dateStr}.csv`;
             
-            // Download the CSV
+            // Fallback to original download method
             await download(csvData, filename, 'text/csv');
-            console.log('Successfully downloaded audit logs as CSV');
+            console.log('Successfully downloaded audit logs as CSV via fallback method');
         } catch (error) {
             console.error('Error exporting audit logs:', error);
             throw error; // Re-throw since UI expects this to handle errors
         }
+    };
+    
+    // Helper function to convert JSON array to CSV string
+    const convertToCSV = (data: any[]): string => {
+        if (!data || data.length === 0) {
+            return '';
+        }
+        
+        // Get headers from the first object
+        const headers = Object.keys(data[0])
+            .filter(key => !key.startsWith('@')); // Skip OData annotation properties
+        
+        // Add headers row
+        let csv = headers.join(',') + '\n';
+        
+        // Add data rows
+        for (const item of data) {
+            const row = headers
+                .map(header => {
+                    const value = item[header];
+                    
+                    // Handle null/undefined values
+                    if (value === null || value === undefined) {
+                        return '';
+                    }
+                    
+                    // Handle strings, escape quotes and commas
+                    if (typeof value === 'string') {
+                        // Escape quotes by doubling them and wrap in quotes
+                        return `"${value.replace(/"/g, '""')}"`;
+                    }
+                    
+                    // For other types, convert to string
+                    return String(value);
+                })
+                .join(',');
+            
+            csv += row + '\n';
+        }
+        
+        return csv;
     };
 
     return {

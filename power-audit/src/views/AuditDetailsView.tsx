@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Card, Table, Button, Descriptions, Spin, Divider, Typography, Alert } from 'antd';
-import { ArrowLeftOutlined } from '@ant-design/icons';
+import { Card, Table, Button, Descriptions, Spin, Divider, Typography, Alert, Space, message, Modal } from 'antd';
+import { ArrowLeftOutlined, DownloadOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 
 import { usePowerToolsApi } from 'powertools/apiHook';
@@ -182,6 +182,99 @@ const AuditDetailsView: React.FC = () => {
     }
   ];
 
+  // Function to export audit details to CSV
+  const exportToCSV = () => {
+    try {
+      if (!auditLog || auditDetails.length === 0) {
+        message.warning('No audit details available to export');
+        return;
+      }
+
+      // Create CSV headers
+      const headers = ['Attribute', 'Old Value', 'New Value'];
+      
+      // Format data rows
+      const rows = auditDetails.map(detail => {
+        const attributeName = getAttributeDisplayName(detail.attributemask || detail.attributename || '');
+        return [
+          attributeName,
+          detail.oldvalue || '',
+          detail.newvalue || ''
+        ];
+      });
+      
+      // Add metadata as first rows
+      const metadata = [
+        ['Audit Information', '', ''],
+        ['Audit ID', auditLog.auditid, ''],
+        ['Created On', dayjs(auditLog.createdon).format('YYYY-MM-DD HH:mm:ss'), ''],
+        ['Operation', operationLabels[auditLog.operation] || auditLog.operation, ''],
+        ['Entity', entityDisplayName || auditLog.objecttypecode_formatted || auditLog.objecttypecode, ''],
+        ['Record ID', auditLog.objectid || auditLog.transactionid || 'N/A', ''],
+        ['User', userName || auditLog.username || auditLog._userid_value || auditLog.userid || 'N/A', ''],
+        ['', '', ''], // Empty row as separator
+        headers // Column headers
+      ];
+      
+      // Combine metadata and data rows
+      const csvContent = [
+        ...metadata,
+        ...rows
+      ]
+        .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+        .join('\n');
+      
+      // Set filename based on entity and date
+      const entityName = entityDisplayName || auditLog.objecttypecode || 'record';
+      const formattedDate = dayjs(auditLog.createdon).format('YYYY-MM-DD_HHmmss');
+      const filename = `audit_${entityName.replace(/\s+/g, '_').toLowerCase()}_${formattedDate}.csv`;
+      
+      // Use PowerToolsUI's built-in download method if available
+      if (window.PowerTools && typeof window.PowerTools.download === 'function') {
+        // Call the PowerToolsUI download method directly
+        window.PowerTools.download(csvContent, filename, 'text/csv');
+        message.success('Audit details exported successfully');
+      } else {
+        // Fallback to clipboard copy method
+        const textarea = document.createElement('textarea');
+        textarea.value = csvContent;
+        textarea.setAttribute('readonly', '');
+        textarea.style.position = 'absolute';
+        textarea.style.left = '-9999px';
+        document.body.appendChild(textarea);
+        
+        // Select the text and copy to clipboard
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        
+        // Show success message with instructions
+        message.success('Audit details copied to clipboard. You can now paste into a text editor and save as a .csv file.');
+        
+        // Open popup with instructions
+        Modal.info({
+          title: 'Export Successful',
+          content: (
+            <div>
+              <p>The audit details have been copied to your clipboard.</p>
+              <p>To save the data:</p>
+              <ol>
+                <li>Open a text editor (like Notepad, TextEdit, etc.)</li>
+                <li>Paste the clipboard content (Ctrl+V or Cmd+V)</li>
+                <li>Save the file with a .csv extension</li>
+                <li>The suggested filename is: <strong>{filename}</strong></li>
+              </ol>
+            </div>
+          ),
+          onOk() {},
+        });
+      }
+    } catch (error) {
+      console.error('Error exporting audit details:', error);
+      message.error('Failed to export audit details');
+    }
+  };
+
   if (!isLoaded) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
@@ -227,9 +320,19 @@ const AuditDetailsView: React.FC = () => {
       <Card
         bordered={false}
         title={
-          <Button type="primary" icon={<ArrowLeftOutlined />} onClick={handleBack}>
-            Back
-          </Button>
+          <Space>
+            <Button type="primary" icon={<ArrowLeftOutlined />} onClick={handleBack}>
+              Back
+            </Button>
+            <Button 
+              type="default" 
+              icon={<DownloadOutlined />} 
+              onClick={exportToCSV}
+              disabled={loading || !auditLog || auditDetails.length === 0}
+            >
+              Export
+            </Button>
+          </Space>
         }
       >
         <Descriptions title="Audit Information" bordered>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Table, Button, DatePicker, Select, Row, Col, Card, Input, Space, Spin } from 'antd';
+import { Table, Button, DatePicker, Select, Row, Col, Card, Input, Space, Spin, message, Modal } from 'antd';
 import { DownloadOutlined, SearchOutlined, ReloadOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
@@ -9,6 +9,7 @@ import moment from 'moment';
 import { usePowerToolsApi } from 'powertools/apiHook';
 import { useAuditLogsService } from 'api/auditLogs';
 import { IAuditLog, operationLabels } from 'models/auditLog';
+import { IoDataResponse } from 'models/oDataResponse';
 
 const { RangePicker } = DatePicker;
 const { Option } = Select;
@@ -23,7 +24,7 @@ const clickableRowStyle = {
 
 const AuditLogView: React.FC = () => {
   const navigate = useNavigate();
-  const { isLoaded } = usePowerToolsApi();
+  const { isLoaded, get, getAsJson } = usePowerToolsApi();
   const auditService = useAuditLogsService();
   
   const [loading, setLoading] = useState<boolean>(false);
@@ -92,19 +93,154 @@ const AuditLogView: React.FC = () => {
       const startDate = dateRange?.[0]?.toDate();
       const endDate = dateRange?.[1]?.toDate();
       
-      await auditService.exportAuditLogsAsCsv(
-        startDate,
-        endDate,
-        operation,
-        entityName,
-        userId
-      );
+      // Check if we can use PowerToolsUI's download method directly
+      if (window.PowerTools && typeof window.PowerTools.download === 'function') {
+        // Use the service which now checks for PowerTools.download
+        await auditService.exportAuditLogsAsCsv(
+          startDate,
+          endDate,
+          operation,
+          entityName,
+          userId
+        );
+        message.success('Audit logs exported successfully');
+      } else {
+        // We need to implement a fallback that gets the data and uses clipboard
+        const query = new URLSearchParams();
+        
+        // Select relevant fields
+        query.set('$select', 'auditid,createdon,operation,action,objecttypecode,attributemask,_userid_value,transactionid');
+        
+        // Build filter based on parameters
+        const filters: string[] = [];
+        
+        if (startDate) {
+          filters.push(`createdon ge ${startDate.toISOString()}`);
+        }
+        
+        if (endDate) {
+          filters.push(`createdon le ${endDate.toISOString()}`);
+        }
+        
+        if (operation !== undefined) {
+          filters.push(`operation eq ${operation}`);
+        }
+        
+        if (entityName) {
+          filters.push(`objecttypecode eq '${entityName}'`);
+        }
+        
+        if (userId) {
+          filters.push(`_userid_value eq ${userId}`);
+        }
+        
+        if (filters.length > 0) {
+          query.set('$filter', filters.join(' and '));
+        }
+        
+        // Set large page size for export
+        query.set('$top', '5000');
+        
+        // Add ordering by creation date desc
+        query.set('$orderby', 'createdon desc');
+        
+        // Get response using API context directly with getAsJson
+        const response = await getAsJson<IoDataResponse<IAuditLog>>('/api/data/v9.0/audits', query);
+        if (!response || !response.value || !Array.isArray(response.value)) {
+          throw new Error('Invalid response format from API');
+        }
+        
+        // Convert JSON data to CSV
+        const csvData = convertToCSV(response.value);
+        if (!csvData) {
+          throw new Error('Empty CSV data received');
+        }
+        
+        // Generate a filename with current date
+        const dateStr = new Date().toISOString().split('T')[0];
+        const filename = `audit_logs_${dateStr}.csv`;
+        
+        // Copy to clipboard as fallback
+        const textarea = document.createElement('textarea');
+        textarea.value = csvData;
+        textarea.setAttribute('readonly', '');
+        textarea.style.position = 'absolute';
+        textarea.style.left = '-9999px';
+        document.body.appendChild(textarea);
+        
+        // Select the text and copy to clipboard
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        
+        // Show success message with instructions
+        message.success('Audit logs copied to clipboard. You can now paste into a text editor and save as a .csv file.');
+        
+        // Open popup with instructions
+        Modal.info({
+          title: 'Export Successful',
+          content: (
+            <div>
+              <p>The audit logs have been copied to your clipboard.</p>
+              <p>To save the data:</p>
+              <ol>
+                <li>Open a text editor (like Notepad, TextEdit, etc.)</li>
+                <li>Paste the clipboard content (Ctrl+V or Cmd+V)</li>
+                <li>Save the file with a .csv extension</li>
+                <li>The suggested filename is: <strong>{filename}</strong></li>
+              </ol>
+            </div>
+          ),
+          onOk() {},
+        });
+      }
     } catch (error) {
       console.error('Error exporting audit logs:', error);
       setError('Failed to export audit logs. Please try again.');
     } finally {
       setLoading(false);
     }
+  };
+
+  // Helper function to convert JSON array to CSV string
+  const convertToCSV = (data: any[]): string => {
+    if (!data || data.length === 0) {
+      return '';
+    }
+    
+    // Get headers from the first object
+    const headers = Object.keys(data[0])
+      .filter(key => !key.startsWith('@')); // Skip OData annotation properties
+    
+    // Add headers row
+    let csv = headers.join(',') + '\n';
+    
+    // Add data rows
+    for (const item of data) {
+      const row = headers
+        .map(header => {
+          const value = item[header];
+          
+          // Handle null/undefined values
+          if (value === null || value === undefined) {
+            return '';
+          }
+          
+          // Handle strings, escape quotes and commas
+          if (typeof value === 'string') {
+            // Escape quotes by doubling them and wrap in quotes
+            return `"${value.replace(/"/g, '""')}"`;
+          }
+          
+          // For other types, convert to string
+          return String(value);
+        })
+        .join(',');
+      
+      csv += row + '\n';
+    }
+    
+    return csv;
   };
 
   const handleSearch = () => {
