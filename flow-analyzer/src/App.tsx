@@ -26,7 +26,14 @@ const AppContent: React.FC = () => {
   const [selectedFlows, setSelectedFlows] = useState<string[]>([]);
   const [flowsLoading, setFlowsLoading] = useState(true);
   
-  const { isLoaded, analyzeFlow, getFlowDetails, getFlows, testApiConnection } = useFlowService();
+  const { 
+    isLoaded, 
+    analyzeFlow, 
+    getFlowDetails, 
+    getFlowDetailsWithChildren,
+    getFlows, 
+    testApiConnection 
+  } = useFlowService();
 
   useEffect(() => {
     if (selectedFlow && !flowAnalysis) {
@@ -150,18 +157,19 @@ const AppContent: React.FC = () => {
     try {
       setLoading(true);
       
-      // First get flow details
-      const details = await getFlowDetails(selectedFlow.id);
+      // Use getFlowDetailsWithChildren instead of getFlowDetails to include child flows
+      const details = await getFlowDetailsWithChildren(selectedFlow.id);
       console.log('Flow details loaded:', {
         id: details.id,
         name: details.name,
         actionsLength: details.actions.length,
         triggersLength: details.triggers.length,
-        connectionReferencesLength: details.connectionReferences.length
+        connectionReferencesLength: details.connectionReferences.length,
+        childFlowsLength: details.childFlows?.length || 0 // Log child flows count
       });
       setFlowDetails(details);
       
-      // Then analyze the flow
+      // Then analyze the flow (analyzeFlow now uses getFlowDetailsWithChildren internally)
       const analysis = await analyzeFlow(selectedFlow.id);
       console.log('Flow analysis completed:', {
         connectorsLength: analysis.connectors.length,

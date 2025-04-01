@@ -52,7 +52,7 @@ export const FlowVisualizer: React.FC<FlowVisualizerProps> = ({ flow, flowDetail
   const [error, setError] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
   
-  const { generateFlowDiagram, generateSimplifiedFlowDiagram } = useFlowService();
+  const { generateFlowDiagram, generateSimplifiedFlowDiagram, getFlowDetailsWithChildren } = useFlowService();
 
   useEffect(() => {
     console.log('FlowVisualizer effect triggered', { 
@@ -108,8 +108,11 @@ export const FlowVisualizer: React.FC<FlowVisualizerProps> = ({ flow, flowDetail
         const diagramId = `flowdiagram-${safeId}-${Date.now()}`;
         console.log(`Using diagram ID: ${diagramId}`);
         
+        // Use getFlowDetailsWithChildren to include child flow details
+        const details = await getFlowDetailsWithChildren(flow.id);
+        
         // Generate the diagram from the flow details
-        const diagramDefinition = generateFlowDiagram(flowDetails);
+        const diagramDefinition = generateFlowDiagram(details);
         console.log('Generated diagram definition length:', diagramDefinition.length);
         console.log('First 100 chars of diagram:', diagramDefinition.substring(0, 100));
         
@@ -144,7 +147,7 @@ export const FlowVisualizer: React.FC<FlowVisualizerProps> = ({ flow, flowDetail
             diagramContainer.className = 'mermaid';
             
             // Use the simplified flow diagram generator
-            const simplifiedFlowDiagram = generateSimplifiedFlowDiagram(flowDetails);
+            const simplifiedFlowDiagram = generateSimplifiedFlowDiagram(details);
             console.log(`Using simplified flow diagram (${simplifiedFlowDiagram.length} chars, first 100 chars):\n${simplifiedFlowDiagram.substring(0, 100)}...`);
             diagramContainer.textContent = simplifiedFlowDiagram;
             
@@ -206,7 +209,7 @@ export const FlowVisualizer: React.FC<FlowVisualizerProps> = ({ flow, flowDetail
       console.log('FlowVisualizer unmounting, cleaning up');
       // Any cleanup needed
     };
-  }, [flow, flowDetails, generateFlowDiagram, generateSimplifiedFlowDiagram]);
+  }, [flow, flowDetails, generateFlowDiagram, generateSimplifiedFlowDiagram, getFlowDetailsWithChildren]);
   
   // Handle download SVG
   const handleDownloadSVG = () => {

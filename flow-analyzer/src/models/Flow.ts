@@ -24,6 +24,7 @@ export interface FlowDetails {
   connectionReferences: FlowConnector[];
   actions: FlowAction[];
   triggers: FlowTriggerDetails[];
+  childFlows?: FlowDetails[];
 }
 
 export interface FlowAction {

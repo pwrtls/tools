@@ -303,10 +303,67 @@ export function useFlowService() {
     }
   }, [isLoaded, getAsJson]);
 
+  /**
+   * Get detailed information about a flow by ID, including any child flows
+   */
+  const getFlowDetailsWithChildren = useCallback(async (flowId: string, depth: number = 0): Promise<FlowDetails> => {
+    // Prevent infinite recursion with a reasonable depth limit
+    if (depth > 3) {
+      console.warn(`Reached maximum child flow depth (${depth}) for flow ${flowId}`);
+      return getFlowDetails(flowId);
+    }
+    
+    try {
+      // Get the main flow details
+      const flowDetails = await getFlowDetails(flowId);
+      
+      // Look for child workflow references
+      const childFlowIds = new Set<string>();
+      const findChildFlowsInActions = (actions: FlowAction[]): void => {
+        actions.forEach(action => {
+          // Check if this is a child workflow reference
+          if (action.type === 'Workflow' && action.inputs?.host?.workflowReferenceName) {
+            const childFlowId = action.inputs.host.workflowReferenceName;
+            childFlowIds.add(childFlowId);
+          }
+          
+          // Recursively check nested actions
+          if (action.actions) {
+            findChildFlowsInActions(Object.values(action.actions));
+          }
+          if (action.elseActions) {
+            findChildFlowsInActions(Object.values(action.elseActions));
+          }
+        });
+      };
+      
+      findChildFlowsInActions(flowDetails.actions);
+      
+      // Fetch details for each child flow
+      const childFlowPromises = Array.from(childFlowIds).map(childId => 
+        getFlowDetailsWithChildren(childId, depth + 1)
+      );
+      
+      // Wait for all child flow details to be fetched
+      const childFlows = await Promise.all(childFlowPromises);
+      
+      // Attach child flow details to the main flow
+      return {
+        ...flowDetails,
+        childFlows
+      };
+    } catch (error) {
+      console.error(`Error getting details with children for flow ${flowId}:`, error);
+      // Fall back to basic flow details
+      return getFlowDetails(flowId);
+    }
+  }, [getFlowDetails]);
+
   // Analyze flow and gather data about connectors, issues, etc.
   const analyzeFlow = useCallback(async (flowId: string): Promise<FlowAnalysisResult> => {
     try {
-      const details = await getFlowDetails(flowId);
+      // Use getFlowDetailsWithChildren instead of getFlowDetails to get child flows too
+      const details = await getFlowDetailsWithChildren(flowId);
       
       // Analyze connectors used in the flow
       const connectors = analyzeConnectors(details);
@@ -326,7 +383,7 @@ export function useFlowService() {
       console.error('Error analyzing flow:', error);
       throw error;
     }
-  }, [getFlowDetails]);
+  }, [getFlowDetailsWithChildren]);
 
   // Analyze connectors used in the flow
   const analyzeConnectors = (flowDetails: FlowDetails): FlowConnector[] => {
@@ -648,79 +705,371 @@ export function useFlowService() {
       actionList.forEach(action => {
         const nodeId = `${parentPrefix}${action.id.replace(/[^a-zA-Z0-9_]/g, '_')}`; // Sanitize ID
         nodeIdsInScope.push(nodeId);
-        let nodeLabel = JSON.stringify(action.id); // Default label is the action key
-        let nodeDefinition = '';
+        const safeActionType = action.type || ''; // Use a safe variable
+        
+        // Create more informative node label based on action type and inputs
+        let nodeLabelText = action.id; // Default to action ID
         let nodeClass = 'action'; // Default class
         let isContainer = false;
-        const safeActionType = action.type || ''; // Use a safe variable
-
-        // Determine shape, label, class, and handle nested scopes
-        switch (safeActionType) {
-          case 'If':
-          case 'Switch':
-            nodeLabel = JSON.stringify(`Condition: ${action.id}`);
-            nodeDefinition = `${nodeId}{${nodeLabel}}`;
-            nodeClass = 'condition';
-            isContainer = true;
-            diagram += `  subgraph ${nodeId}_Scope ["${action.id} Scope"]\n`;
-            diagram += `    direction TB\n`; // Ensure top-bottom within scope
-            // Process 'true' branch actions
-            if (action.actions) {
-              const trueBranchResult = generateMermaidForScope(action.actions, `${nodeId}_T_`, nodeId); // Pass current node as entry
-              diagram += trueBranchResult.diagram;
+        
+        // Extract details from action inputs based on type
+        if (action.inputs) {
+          if (safeActionType === 'OpenApiConnection') {
+            // For API connections, show the operation and entity
+            const host = action.inputs.host;
+            if (host) {
+              const connName = host.connectionName || '';
+              const opId = host.operationId || '';
+              const params = action.inputs.parameters || {};
+              
+              // For Dataverse operations
+              if (connName.includes('commondataservice') || connName.includes('dataverse')) {
+                // Handle different Dataverse operations
+                if (opId === 'ListRecords') {
+                  const entityName = params.entityName || '';
+                  let filterInfo = '';
+                  
+                  // Extract filter details - use multiline instead of truncating
+                  if (params.$filter) {
+                    const filterText = String(params.$filter);
+                    filterInfo = `<br/>WHERE ${formatMultilineText(filterText, 60)}`;
+                  } else if (params.fetchXml) {
+                    // For FetchXML, show a condensed version
+                    filterInfo = '<br/>(using FetchXML)';
+                    // Could extract entity name from fetchXml if needed
+                  } else if (params.$select) {
+                    const selectFields = String(params.$select);
+                    filterInfo = `<br/>fields: ${formatMultilineText(selectFields, 60)}`;
+                  }
+                  
+                  nodeLabelText = `Get ${entityName} records${filterInfo}`;
+                } else if (opId === 'GetItem') {
+                  const entityName = params.entityName || '';
+                  const recordId = params.recordId ? `<br/>ID: ${String(params.recordId)}` : '';
+                  nodeLabelText = `Get ${entityName}${recordId}`;
+                } else if (opId === 'CreateRecord') {
+                  const entityName = params.entityName || '';
+                  // Show all fields being set, with each on a new line
+                  const fields = Object.keys(params.item || {});
+                  const fieldInfo = fields.length > 0 
+                    ? `<br/>Fields:<br/>${fields.join('<br/>')}` 
+                    : '';
+                  
+                  nodeLabelText = `Create ${entityName}${fieldInfo}`;
+                } else if (opId === 'UpdateRecord') {
+                  const entityName = params.entityName || '';
+                  const recordId = params.recordId ? `<br/>ID: ${String(params.recordId)}` : '';
+                  // Show all fields being updated, with each on a new line
+                  const fields = Object.keys(params.item || {});
+                  const fieldInfo = fields.length > 0 
+                    ? `<br/>Fields:<br/>${fields.join('<br/>')}` 
+                    : '';
+                  
+                  nodeLabelText = `Update ${entityName}${recordId}${fieldInfo}`;
+                } else if (opId === 'DeleteRecord') {
+                  const entityName = params.entityName || '';
+                  const recordId = params.recordId ? `<br/>ID: ${String(params.recordId)}` : '';
+                  nodeLabelText = `Delete ${entityName}${recordId}`;
+                } else if (opId === 'PerformBoundAction' || opId === 'PerformUnboundAction') {
+                  const actionName = params.actionName || '';
+                  nodeLabelText = `${actionName}<br/>(${opId})`;
+                } else {
+                  // Default for other Dataverse operations
+                  nodeLabelText = `${opId}<br/>on ${params.entityName || connName}`;
+                }
+              } else if (connName.includes('excel') || connName.includes('excelonline')) {
+                // Excel operations
+                if (opId === 'GetItems' || opId === 'GetRows') {
+                  const file = params.file || '';
+                  const table = params.table || params.tableName || '';
+                  const fileInfo = file ? ` file:${extractFilename(String(file))}` : '';
+                  const tableInfo = table ? ` table:${extractTableName(String(table))}` : '';
+                  const filterInfo = params.$filter ? ` filter:${String(params.$filter).substring(0, 20)}...` : '';
+                  
+                  nodeLabelText = `Excel: Get Rows${fileInfo}${tableInfo}${filterInfo}`;
+                } else if (opId === 'RunQuery') {
+                  const file = params.file || '';
+                  const fileInfo = file ? ` file:${extractFilename(String(file))}` : '';
+                  nodeLabelText = `Excel: Run Query${fileInfo}`;
+                } else {
+                  // Other Excel operations
+                  nodeLabelText = `Excel: ${opId}`;
+                }
+              } else if (connName.includes('sharepoint')) {
+                // SharePoint operations
+                const site = params.site || '';
+                const list = params.list || '';
+                const itemId = params.id || '';
+                
+                if (opId === 'GetItem') {
+                  nodeLabelText = `SharePoint: Get Item${list ? ` (list:${list})` : ''}${itemId ? ` ID:${itemId}` : ''}`;
+                } else if (opId === 'GetItems') {
+                  const filterInfo = params.$filter ? ` filter:${String(params.$filter).substring(0, 20)}...` : '';
+                  nodeLabelText = `SharePoint: Get Items${list ? ` (list:${list})` : ''}${filterInfo}`;
+                } else if (opId === 'CreateItem') {
+                  nodeLabelText = `SharePoint: Create Item${list ? ` (list:${list})` : ''}`;
+                } else if (opId === 'UpdateItem') {
+                  nodeLabelText = `SharePoint: Update Item${list ? ` (list:${list})` : ''}${itemId ? ` ID:${itemId}` : ''}`;
+                } else if (opId === 'DeleteItem') {
+                  nodeLabelText = `SharePoint: Delete Item${list ? ` (list:${list})` : ''}${itemId ? ` ID:${itemId}` : ''}`;
+                } else {
+                  nodeLabelText = `SharePoint: ${opId}`;
+                }
+              } else {
+                // Generic connector operation
+                nodeLabelText = `${connName}: ${opId}`;
+              }
             }
-            // Process 'else' branch actions
-            if (action.elseActions) {
-              diagram += `    subgraph ${nodeId}_Else ["Else"]\n`;
-              diagram += `      direction TB\n`;
-              const elseBranchResult = generateMermaidForScope(action.elseActions, `${nodeId}_E_`, nodeId); // Pass current node as entry
-              diagram += elseBranchResult.diagram;
-              diagram += `    end\n`; // End Else subgraph
+          } else if (safeActionType === 'ApiConnection') {
+            // Legacy API connection format
+            const apiId = action.inputs.apiId || '';
+            const operationId = action.inputs.operationId || '';
+            nodeLabelText = `${apiId}: ${operationId}`;
+          } else if (safeActionType === 'Http') {
+            // HTTP actions
+            const method = action.inputs.method || '';
+            const uri = action.inputs.uri || '';
+            nodeLabelText = `HTTP ${method}:<br/>${formatMultilineText(uri, 40)}`;
+          } else if (safeActionType === 'Compose') {
+            // For Compose, try to include the actual input value if it's not too complex
+            const inputValue = action.inputs.inputs;
+            let truncatedValue = '';
+            
+            if (inputValue !== undefined) {
+              if (typeof inputValue === 'string') {
+                truncatedValue = formatMultilineText(inputValue, 40);
+                truncatedValue = inputValue.length > 30 ? inputValue.substring(0, 30) + '...' : inputValue;
+              } else if (typeof inputValue === 'number' || typeof inputValue === 'boolean') {
+                truncatedValue = String(inputValue);
+              } else {
+                // For objects or arrays, just show the type
+                truncatedValue = `[${Array.isArray(inputValue) ? 'Array' : 'Object'}]`;
+              }
             }
-            diagram += `  end\n`; // End Condition Scope subgraph
-            break;
-          case 'Foreach':
-          case 'Until':
-            nodeLabel = JSON.stringify(`Loop: ${action.id}`);
-            nodeDefinition = `${nodeId}[/${nodeLabel}/]`;
-            nodeClass = 'loop';
-            isContainer = true;
-            diagram += `  subgraph ${nodeId}_Scope ["${action.id} Loop"]\n`;
-            diagram += `    direction TB\n`;
-            if (action.actions) {
-              const loopResult = generateMermaidForScope(action.actions, `${nodeId}_L_`, nodeId);
-              diagram += loopResult.diagram;
+            
+            nodeLabelText = truncatedValue ? `Compose: ${truncatedValue}` : 'Compose data';
+          } else if (safeActionType === 'Parse') {
+            // For Parse JSON, try to show the schema source
+            const content = action.inputs.content;
+            let contentInfo = '';
+            
+            if (typeof content === 'string' && content.startsWith('@')) {
+              // This is a reference expression
+              contentInfo = ` (${content})`;
             }
-            diagram += `  end\n`; // End Loop Scope subgraph
-            break;
-          case 'Scope':
-            nodeLabel = JSON.stringify(`Scope: ${action.id}`);
-            nodeDefinition = `${nodeId}[(${nodeLabel})]`; // Stadium shape
-            nodeClass = 'scope';
-            isContainer = true;
-            diagram += `  subgraph ${nodeId}_Scope ["${action.id}"]\n`;
-            diagram += `    direction TB\n`;
-            if (action.actions) {
-              const scopeResult = generateMermaidForScope(action.actions, `${nodeId}_S_`, nodeId);
-              diagram += scopeResult.diagram;
+            
+            nodeLabelText = `Parse JSON${contentInfo}`;
+          } else if (safeActionType === 'Table') {
+            // For HTML Table, show the source if possible
+            const sourceInfo = action.inputs.from ? ` from: ${action.inputs.from.toString().substring(0, 20)}...` : '';
+            nodeLabelText = `Create HTML Table${sourceInfo}`;
+          } else if (safeActionType === 'Join') {
+            // For Join, show the format
+            const format = action.inputs.format || '';
+            nodeLabelText = `Join Array${format ? ` (${format})` : ''}`;
+          } else if (safeActionType === 'Select') {
+            // For Select, show what we're selecting
+            const from = typeof action.inputs.from === 'string' ? action.inputs.from : '[Array]';
+            const fromInfo = from.startsWith('@') ? ` from:${from}` : '';
+            nodeLabelText = `Select${fromInfo}`;
+          } else if (safeActionType === 'Query') {
+            // For Query/Filter Array, show the source and filter if possible
+            const from = typeof action.inputs.from === 'string' ? action.inputs.from : '[Array]';
+            const fromInfo = from.startsWith('@') ? ` from:${from}` : '';
+            nodeLabelText = `Filter Array${fromInfo}`;
+          } else if (safeActionType === 'Response') {
+            // For Response, show the status code
+            const statusCode = action.inputs.statusCode || '';
+            nodeLabelText = `Send Response (${statusCode})`;
+          } else if (safeActionType === 'Workflow') {
+            // Child flow calls
+            const workflowName = action.inputs?.host?.workflowReferenceName || '';
+            
+            // Check if we have details for this child flow
+            const childFlowDetails = flowDetails.childFlows?.find(cf => cf.name === workflowName);
+            
+            // Create a more informative label that includes child flow details if available
+            let childFlowInfo = '';
+            if (childFlowDetails) {
+              const triggerCount = childFlowDetails.triggers.length;
+              const actionCount = childFlowDetails.actions.length;
+              const connectorCount = childFlowDetails.connectionReferences.length;
+              
+              childFlowInfo = `<br/><br/>Contains:<br/>- ${triggerCount} trigger${triggerCount !== 1 ? 's' : ''}<br/>- ${actionCount} action${actionCount !== 1 ? 's' : ''}<br/>- ${connectorCount} connector${connectorCount !== 1 ? 's' : ''}`;
             }
-            diagram += `  end\n`; // End Scope subgraph
-            break;
-          case 'Expression':
-          case 'Compose': // Often used for expressions too
-            nodeDefinition = `${nodeId}>${nodeLabel}]`;
-            nodeClass = 'expression';
-            break;
-          case 'Workflow':
-            nodeLabel = JSON.stringify(`Child Flow: ${action.id}`);
-            nodeDefinition = `${nodeId}[(${nodeLabel})]`; // Stadium shape
-            nodeClass = 'childflow';
-            break;
-          default:
-            // Default rectangular shape
-            nodeDefinition = `${nodeId}[${nodeLabel}]`;
-            nodeClass = 'action';
-            break;
+            
+            // Try to get any parameters being passed
+            const params = action.inputs.body || {};
+            const paramLines = Object.entries(params).map(([key, value]) => {
+              let valueStr = '';
+              
+              // Format the parameter value based on its type
+              if (typeof value === 'string') {
+                valueStr = value.length > 30 ? value.substring(0, 30) + '...' : value;
+              } else if (value === null || value === undefined) {
+                valueStr = '(null)';
+              } else if (typeof value === 'object') {
+                try {
+                  valueStr = JSON.stringify(value).substring(0, 30);
+                  if (JSON.stringify(value).length > 30) valueStr += '...';
+                } catch (e) {
+                  valueStr = '(complex object)';
+                }
+              } else {
+                valueStr = String(value);
+              }
+              
+              return `- ${key}: ${valueStr}`;
+            });
+            
+            const paramInfo = paramLines.length > 0 
+              ? `<br/><br/>Parameters:<br/>${paramLines.join('<br/>')}` 
+              : '';
+            
+            nodeLabelText = `CHILD Flow:<br/>${workflowName}${paramInfo}${childFlowInfo}`;
+            nodeClass = 'childflow'; // Special class for child flow nodes
+          }
+        }
+        
+        if (safeActionType === 'If' || safeActionType === 'Switch') {
+          // For conditions, show the condition expression if available
+          if (action.expression) {
+            // Extract and simplify condition for display
+            const conditionText = JSON.stringify(action.expression).substring(0, 40);
+            nodeLabelText = `If: ${conditionText}${conditionText.length > 40 ? '...' : ''}`;
+          } else {
+            nodeLabelText = `Condition: ${action.id}`;
+          }
+          nodeClass = 'condition';
+          isContainer = true;
+        } else if (safeActionType === 'Foreach' || safeActionType === 'Until') {
+          // For loops, show what's being iterated if available
+          const loopOn = action.inputs?.foreach || action.inputs?.until || '';
+          if (loopOn && typeof loopOn === 'string' && loopOn.length < 40) {
+            nodeLabelText = `${safeActionType} ${loopOn}`;
+          } else {
+            nodeLabelText = `Loop: ${action.id}`;
+          }
+          nodeClass = 'loop';
+          isContainer = true;
+        } else if (safeActionType === 'Scope') {
+          nodeLabelText = `Scope: ${action.id}`;
+          nodeClass = 'scope';
+          isContainer = true;
+        } else if (safeActionType === 'Expression' || action.kind === 'Expression') {
+          // For expressions, show the function name if available
+          const expression = action.inputs?.expression || '';
+          if (expression && typeof expression === 'string' && expression.length < 40) {
+            nodeLabelText = expression;
+          } else if (action.kind) {
+            nodeLabelText = `Expression (${action.kind})`;
+          } else {
+            nodeLabelText = `Expression: ${action.id}`;
+          }
+          nodeClass = 'expression';
+        }
+        
+        // Escape and wrap the label in quotes for Mermaid
+        const nodeLabel = JSON.stringify(nodeLabelText);
+        
+        // Define node based on class/container type
+        let nodeDefinition = '';
+        if (safeActionType === 'If' || safeActionType === 'Switch') {
+          // Format condition text using formatMultilineText for better readability
+          let conditionDisplay = nodeLabelText;
+          if (typeof conditionDisplay === 'string') {
+            conditionDisplay = formatMultilineText(conditionDisplay, 50);
+          }
+          
+          nodeDefinition = `${nodeId}{${JSON.stringify(conditionDisplay)}}`;
+          
+          // For conditions, create a subgraph with the condition node as the title
+          diagram += `  subgraph ${nodeId}_Scope ["${formatMultilineText(nodeLabelText, 40)}"]\n`;
+          diagram += `    direction TB\n`;
+          diagram += `    class ${nodeId}_Scope condition\n`;
+          
+          // Process 'true' branch actions
+          if (action.actions) {
+            const trueBranchResult = generateMermaidForScope(action.actions, `${nodeId}_T_`, nodeId);
+            diagram += trueBranchResult.diagram;
+            
+            // Only connect from condition to the first action in the true branch
+            // The condition subgraph itself will act as the container
+          }
+          
+          // Process 'else' branch actions
+          if (action.elseActions) {
+            diagram += `    subgraph ${nodeId}_Else ["Else"]\n`;
+            diagram += `      direction TB\n`;
+            diagram += `      class ${nodeId}_Else elseBranch\n`; // Style the else branch distinctly
+            const elseBranchResult = generateMermaidForScope(action.elseActions, `${nodeId}_E_`, nodeId);
+            diagram += elseBranchResult.diagram;
+            diagram += `    end\n`;
+          }
+          
+          diagram += `  end\n`;
+        } else if (safeActionType === 'Foreach' || safeActionType === 'Until') {
+          // Format loop label text using formatMultilineText for better readability
+          let loopDisplay = nodeLabelText;
+          if (typeof loopDisplay === 'string') {
+            loopDisplay = formatMultilineText(loopDisplay, 50);
+          }
+          
+          nodeDefinition = `${nodeId}[/${JSON.stringify(loopDisplay)}/]`;
+          diagram += `  subgraph ${nodeId}_Scope ["${formatMultilineText(nodeLabelText, 40)}"]\n`;
+          diagram += `    direction TB\n`;
+          diagram += `    class ${nodeId}_Scope loop\n`;
+          
+          if (action.actions) {
+            const loopResult = generateMermaidForScope(action.actions, `${nodeId}_L_`, nodeId);
+            diagram += loopResult.diagram;
+            
+            // No need to manually connect to first action - the subgraph container handles it
+          }
+          
+          diagram += `  end\n`;
+        } else if (safeActionType === 'Scope') {
+          // Format scope label text using formatMultilineText for better readability
+          let scopeDisplay = nodeLabelText;
+          if (typeof scopeDisplay === 'string') {
+            scopeDisplay = formatMultilineText(scopeDisplay, 50);
+          }
+          
+          nodeDefinition = `${nodeId}[(${JSON.stringify(scopeDisplay)})]`;
+          diagram += `  subgraph ${nodeId}_Scope ["${formatMultilineText(nodeLabelText, 40)}"]\n`;
+          diagram += `    direction TB\n`;
+          diagram += `    class ${nodeId}_Scope scope\n`;
+          
+          if (action.actions) {
+            const scopeResult = generateMermaidForScope(action.actions, `${nodeId}_S_`, nodeId);
+            diagram += scopeResult.diagram;
+          }
+          
+          diagram += `  end\n`;
+        } else if (safeActionType === 'Expression' || action.kind === 'Expression') {
+          // Format expression text for better readability
+          let expressionDisplay = nodeLabelText;
+          if (typeof expressionDisplay === 'string') {
+            expressionDisplay = formatMultilineText(expressionDisplay, 40);
+          }
+          
+          nodeDefinition = `${nodeId}>${JSON.stringify(expressionDisplay)}]`;
+        } else if (safeActionType === 'Workflow') {
+          // Use special styling for child flow nodes
+          let childFlowDisplay = nodeLabelText;
+          if (typeof childFlowDisplay === 'string') {
+            childFlowDisplay = formatMultilineText(childFlowDisplay, 60);
+          }
+          
+          nodeDefinition = `${nodeId}[${JSON.stringify(childFlowDisplay)}]`;
+        } else {
+          // For regular actions, make sure text is properly formatted for multiline display
+          let actionDisplay = nodeLabelText;
+          if (typeof actionDisplay === 'string') {
+            actionDisplay = formatMultilineText(actionDisplay, 40);
+          }
+          
+          nodeDefinition = `${nodeId}[${JSON.stringify(actionDisplay)}]`;
         }
         
         // Define the node itself (container nodes are defined by their subgraph)
@@ -844,7 +1193,7 @@ export function useFlowService() {
     diagram += `classDef condition fill:#FFCC99,stroke:#FF9933\n\n`;
     diagram += `classDef expression fill:#C2FABC,stroke:#2ECC71\n\n`;
     diagram += `classDef loop fill:#E8DAEF,stroke:#8E44AD\n\n`;
-    diagram += `classDef childflow fill:#AED6F1,stroke:#3498DB\n\n`;
+    diagram += `classDef childflow fill:#AED6F1,stroke:#3498DB,stroke-width:2px,stroke-dasharray:5,5\n\n`;
     diagram += `classDef scope fill:#F5B7B1,stroke:#C0392B\n\n`; 
 
     // Apply classes to legend items (Mermaid quirk)
@@ -855,10 +1204,58 @@ export function useFlowService() {
     return diagram;
   }, []);
 
+  // Helper functions for extracting readable info from complex parameters
+  function extractFilename(path: string): string {
+    // Try to extract just the filename from a path or ID
+    const parts = path.split('/');
+    return parts[parts.length - 1].substring(0, 15) + (parts[parts.length - 1].length > 15 ? '...' : '');
+  }
+
+  function extractTableName(tableId: string): string {
+    // Extract a readable table name from complex Excel table IDs
+    if (tableId.includes('{') && tableId.includes('}')) {
+      return 'Table';
+    }
+    return tableId.substring(0, 15) + (tableId.length > 15 ? '...' : '');
+  }
+
+  // Function to format text for multiline display in Mermaid nodes
+  const formatMultilineText = (text: string, maxLineLength: number = 40): string => {
+    if (!text || text.length <= maxLineLength) {
+      return text;
+    }
+    
+    // Convert non-breakable text into lines
+    let result = '';
+    let currentLine = '';
+    
+    // Split by words to preserve word boundaries
+    const words = text.split(' ');
+    
+    words.forEach(word => {
+      // If adding this word would exceed the line length, add a line break
+      if (currentLine.length + word.length + 1 > maxLineLength) {
+        result += currentLine + '<br/>';
+        currentLine = word;
+      } else {
+        // Otherwise, add the word to the current line
+        currentLine = currentLine ? currentLine + ' ' + word : word;
+      }
+    });
+    
+    // Add the last line
+    if (currentLine) {
+      result += currentLine;
+    }
+    
+    return result;
+  };
+
   return {
     isLoaded,
     getFlows,
     getFlowDetails,
+    getFlowDetailsWithChildren,
     analyzeFlow,
     downloadDocumentation,
     mockMethods,
