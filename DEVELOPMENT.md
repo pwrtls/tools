@@ -24,6 +24,8 @@ Power Tools are built as React applications that integrate with the PowerTools U
 
 Each tool operates within this framework, focusing on a specific functionality while leveraging the shared infrastructure.
 
+> **IMPORTANT**: Power Tools are not standalone applications. They must be loaded within the PowerTools UI framework which provides the authenticated connection to Power Platform environments. All tools should use the PowerTools Context for API access.
+
 ## Setup Process
 
 ### Prerequisites
@@ -76,6 +78,8 @@ Each tool operates within this framework, focusing on a specific functionality w
 
 5. Set up the directory structure (see [Project Structure](#project-structure))
 
+6. Setup PowerTools integration in your project (see [PowerTools Integration](#powertools-integration))
+
 ## Project Structure
 
 Organize your project as follows:
@@ -91,96 +95,157 @@ your-tool-name/
 │   ├── components/            # Reusable UI components
 │   ├── api/                   # API service functions
 │   ├── powertools/            # PowerTools integration
+│   │   ├── context.tsx        # PowerTools Context Provider
+│   │   └── apiHook.tsx        # PowerTools API Hook
+│   ├── @types/                # TypeScript declarations
+│   │   └── powertools.d.ts    # PowerTools API type definitions
 │   └── utils/                 # Utility functions
 ├── package.json
 ├── tsconfig.json
 └── README.md
 ```
 
-### Key Files
+## PowerTools Integration
 
-1. **index.tsx**
-   ```tsx
-   import React from 'react';
-   import ReactDOM from 'react-dom/client';
-   import { ConfigProvider, App } from 'antd';
-   import { PowerToolsContextProvider } from 'powertools/PowerToolsContext';
-   import AppRouter from './AppRouter';
+Tools must integrate with the PowerTools framework to access authenticated API connections. The following files and configurations are required:
 
-   const root = ReactDOM.createRoot(document.getElementById('root') as HTMLElement);
-   root.render(
-     <React.StrictMode>
-       <PowerToolsContextProvider>
-         <ConfigProvider>
-           <App>
-             <AppRouter />
-           </App>
-         </ConfigProvider>
-       </PowerToolsContextProvider>
-     </React.StrictMode>
-   );
-   ```
+### Required API Script (Critical)
 
-2. **AppRouter.tsx**
-   ```tsx
-   import React from 'react';
-   import { HashRouter, Routes, Route } from 'react-router-dom';
-   import { PowerToolsContextProvider } from 'powertools/PowerToolsContext';
-   import MainView from 'views/MainView';
-   import DetailView from 'views/DetailView';
+**Important**: The PowerTools API script must be included in the HTML template before your application loads:
 
-   const AppRouter: React.FC = () => {
-     return (
-       <HashRouter>
-         <PowerToolsContextProvider>
-           <Routes>
-             <Route path="/" element={<MainView />} />
-             <Route path="/details/:id" element={<DetailView />} />
-           </Routes>
-         </PowerToolsContextProvider>
-       </HashRouter>
-     );
-   };
+```html
+<!-- public/index.html -->
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <script src="https://api.powertoolsdev.com/files/api.js"></script>
+    <!-- Other head content -->
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
+```
 
-   export default AppRouter;
-   ```
+This script is essential for your tool to access the PowerTools API properly when running within the PowerTools framework. Without this script, your tool will not be able to access the API due to cross-origin restrictions.
 
-3. **PowerTools Integration (src/powertools/apiHook.ts)**
-   ```tsx
-   import { useState, useEffect, useContext } from 'react';
-   import { PowerToolsContext } from './PowerToolsContext';
+### Type Definitions (src/@types/powertools.d.ts)
 
-   export const usePowerToolsApi = () => {
-     const context = useContext(PowerToolsContext);
-     const [isLoaded, setIsLoaded] = useState(false);
-     
-     useEffect(() => {
-       if (context.isInitialized) {
-         setIsLoaded(true);
-       }
-     }, [context.isInitialized]);
-     
-     const getAsJson = async <T>(url: string, queryParams?: URLSearchParams): Promise<T> => {
-       // Implementation
-     };
-     
-     const get = async (url: string, queryParams?: URLSearchParams): Promise<Response> => {
-       // Implementation
-     };
-     
-     const post = async (url: string, data: any): Promise<Response> => {
-       // Implementation
-     };
-     
-     return {
-       isLoaded,
-       getAsJson,
-       get,
-       post,
-       // Other methods as needed
-     };
-   };
-   ```
+```typescript
+interface PowerToolsResponse {
+    asJson<T>(): Promise<T>;
+    text(): Promise<string>;
+    getSkipToken?(): Promise<string>;
+}
+
+interface IHeaders {
+    [key: string]: string;
+}
+
+interface PowerTools {
+    version: string;
+    isLoaded(): boolean;
+    onLoad(): Promise<void>;
+    get(url: string, params?: URLSearchParams, headers?: IHeaders): Promise<PowerToolsResponse>;
+    post(url: string, body?: any, headers?: IHeaders): Promise<PowerToolsResponse>;
+    download(content: string, fileName?: string, mimeType?: string): Promise<void>;
+    addConnectionChangeListener(callback: (name: string | undefined) => void): void;
+}
+
+declare global {
+    interface Window {
+        PowerTools?: PowerTools;
+    }
+}
+```
+
+### PowerTools Context (src/powertools/context.tsx)
+
+```tsx
+import React from 'react';
+import { Result } from 'antd';
+
+type PowerToolsContextType = {
+    isLoaded: boolean;
+    connectionName: string;
+    get?: ((url: string, params?: URLSearchParams, headers?: Record<string, string>) => Promise<any>);
+    post?: ((url: string, body?: any, headers?: Record<string, string>) => Promise<any>);
+    download?: ((content: string, fileName?: string, mimeType?: string) => Promise<void>);
+};
+
+export const PowerToolsContext = React.createContext<PowerToolsContextType>({ 
+    isLoaded: false, 
+    connectionName: '', 
+    get: undefined, 
+    post: undefined, 
+    download: undefined 
+});
+
+// ... Context provider implementation
+```
+
+### PowerTools API Hook (src/powertools/apiHook.tsx)
+
+```tsx
+import { useContext } from 'react';
+import { PowerToolsContext } from './context';
+
+export function usePowerToolsApi() {
+    const { get, post, isLoaded, download } = useContext(PowerToolsContext);
+
+    async function getAsJson<T>(url: string, query?: URLSearchParams, headers?: Record<string, string>): Promise<T> {
+        if (!get) {
+            throw new Error('PowerTools API is not available - get method missing');
+        }
+
+        const res = await get(url, query, headers);
+        return await res.asJson<T>();
+    }
+
+    // ... additional API methods
+    
+    return { get, getAsJson, post, /* additional methods */ } as const;
+}
+```
+
+### App Component
+
+```tsx
+import React from 'react';
+import { PowerToolsContextProvider } from './powertools/context';
+
+const App: React.FC = () => {
+  return (
+    <PowerToolsContextProvider showNoConnection>
+      {/* Your application content */}
+    </PowerToolsContextProvider>
+  );
+};
+
+export default App;
+```
+
+### Optional: Mock PowerTools for Development
+
+For local development without the PowerTools environment, you can create a mock implementation:
+
+```typescript
+// src/utils/mockPowerTools.ts
+export const setupMockPowerTools = () => {
+  // Only set up if PowerTools doesn't exist
+  if (typeof window.PowerTools !== 'undefined') return;
+  
+  window.PowerTools = {
+    version: '1.0.0-mock',
+    isLoaded: () => true,
+    onLoad: () => Promise.resolve(),
+    addConnectionChangeListener: (listener) => listener('Mock Connection'),
+    get: (url) => Promise.resolve({ asJson: () => Promise.resolve({}) }),
+    post: (url) => Promise.resolve({ asJson: () => Promise.resolve({}) }),
+    download: () => Promise.resolve()
+  };
+};
+```
 
 ## Accessing Microsoft Resources
 
@@ -319,6 +384,8 @@ Follow these guidelines for a consistent user experience:
 2. Use the PowerTools development server for testing with a real Dynamics environment.
 
 3. Test with the browser console open to catch errors.
+
+> **Note**: Since the tools depend on the PowerTools API, full testing will require integration with the PowerTools UI framework. For isolated testing, you may need to mock the PowerTools API.
 
 ### Test Cases
 

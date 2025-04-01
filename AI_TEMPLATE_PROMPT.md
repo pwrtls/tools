@@ -44,7 +44,16 @@ The tool should follow the established pattern:
   |- utils/ - Utility functions
 
 ### PowerTools Integration
-This tool should use the PowerTools Context and API hooks for accessing Dynamics 365 data:
+This tool must include the PowerTools API script in the HTML template to function properly:
+```html
+<!-- public/index.html -->
+<head>
+  <script src="https://api.powertoolsdev.com/files/api.js"></script>
+  <!-- Other head content -->
+</head>
+```
+
+Then use the PowerTools Context and API hooks for accessing Dynamics 365 data:
 ```typescript
 import { usePowerToolsApi } from 'powertools/apiHook';
 
@@ -129,7 +138,16 @@ The tool should follow the established pattern:
   |- utils/ - Utility functions
 
 ### PowerTools Integration
-This tool should use the PowerTools Context and API hooks for accessing Dynamics 365 data:
+This tool must include the PowerTools API script in the HTML template to function properly:
+```html
+<!-- public/index.html -->
+<head>
+  <script src="https://api.powertoolsdev.com/files/api.js"></script>
+  <!-- Other head content -->
+</head>
+```
+
+Then use the PowerTools Context and API hooks for accessing Dynamics 365 data:
 ```typescript
 import { usePowerToolsApi } from 'powertools/apiHook';
 

@@ -1,0 +1,131 @@
+.app-container {
+  min-height: 100vh;
+}
+
+.header-title {
+  margin: 0;
+  font-size: 20px;
+  color: #1890ff;
+  flex-shrink: 0;
+}
+
+.header-search {
+  flex-grow: 1;
+  padding-right: 24px;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.flow-card {
+  margin-bottom: 16px;
+  border-radius: 8px;
+}
+
+.flow-title {
+  margin: 0;
+  display: flex;
+  align-items: center;
+}
+
+.flow-description {
+  margin-top: 8px;
+  color: rgba(0, 0, 0, 0.45);
+}
+
+.flow-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.flow-visualizer {
+  width: 100%;
+  overflow: auto;
+  min-height: 400px;
+  border-radius: 4px;
+  background-color: #f5f5f5;
+  padding: 16px;
+}
+
+/* Flow List Styles */
+.flow-list-container {
+  margin-bottom: 20px;
+}
+
+.flow-list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+/* Flow Visualization */
+.flow-visualization-container {
+  margin-top: 16px;
+}
+
+/* Search Box */
+.ant-input-search {
+  max-width: 400px;
+}
+
+/* Back Button */
+.back-button {
+  margin-right: 16px;
+  font-size: 16px;
+}
+
+/* Documentation Actions */
+.documentation-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 16px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  /* Header Styles */
+  .ant-layout-header {
+    padding: 0 16px !important;
+    height: auto !important;
+    flex-direction: column;
+    align-items: flex-start !important;
+  }
+
+  .header-title {
+    font-size: 18px;
+    margin-bottom: 10px;
+  }
+  
+  .header-search {
+    width: 100%;
+    padding-right: 0;
+    margin-bottom: 10px;
+  }
+  
+  .header-actions {
+    width: 100%;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+  
+  .ant-input-search {
+    max-width: 100%;
+    width: 100% !important;
+  }
+  
+  .flow-list-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .documentation-actions {
+    justify-content: flex-start;
+    margin-top: 12px;
+  }
+} 
