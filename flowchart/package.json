@@ -48,6 +48,12 @@
     ]
   },
   "devDependencies": {
-    "@types/jspdf": "^2.0.0"
+    "@types/jspdf": "^2.0.0",
+    "nth-check": "^2.1.1"
+  },
+  "resolutions": {
+    "nth-check": "^2.1.1",
+    "postcss": "^8.4.31",
+    "dompurify": "^3.2.4"
   }
 }

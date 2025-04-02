@@ -152,6 +152,33 @@ This creates optimized production build in the `build` directory, which can be l
 - Toggle `USE_MOCK_DATA` to isolate API issues
 - Add console.log statements for debugging complex logic
 
+## Security Considerations
+
+### Dependency Management
+
+The Flow Analyzer uses a variety of npm packages, which occasionally may have security vulnerabilities. Follow these guidelines to manage dependencies securely:
+
+1. **Regular Security Audits**: Run `yarn audit` regularly to identify potential vulnerabilities
+2. **Dependency Resolution**: Use the `resolutions` field in package.json to enforce secure versions of transitive dependencies
+3. **Vulnerability Fixes**: When GitHub reports security vulnerabilities:
+   - Add the patched version to the `resolutions` field in package.json
+   - Run `yarn install --force` to apply the resolutions
+   - Verify fixes with `yarn audit`
+
+Example of dependency resolution in package.json:
+```json
+"resolutions": {
+  "vulnerable-package": "^secure.version.number"
+}
+```
+
+### Security Best Practices
+
+- Keep all dependencies up to date
+- Review and address security alerts promptly
+- Avoid including sensitive information in client-side code
+- Follow secure coding practices for API handling and data processing
+
 ## Contributing Guidelines
 
 1. Create a feature branch for new work
