@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import { Flow, FlowDetails, FlowAnalysisResult, FlowIssue, FlowRecommendation, FlowConnector, FlowAction, FlowTriggerDetails, WorkflowDefinition } from '../models/Flow';
 import { usePowerToolsApi } from '../powertools/apiHook';
 import { mockFlowsResponse, mockFlowDefinition } from '../mock/flowData';
+import { getFlowStatus } from '../utils/flowStatus';
 
 // Set to false for production. Only enable for local testing without PowerTools.
 const USE_MOCK_DATA = false;
@@ -13,6 +14,16 @@ interface DataverseResponse<T> {
     code?: string;
     message?: string;
   };
+}
+
+// PowerTools API specific response wrapper
+interface PowerToolsApiResponse {
+  headers?: any;
+  statusCode?: number;
+  contentLength?: number;
+  content?: string;
+  asJson?: () => Promise<any>;
+  getSkipToken?: () => string | null;
 }
 
 interface DataverseWorkflow {
@@ -32,39 +43,16 @@ interface DataverseWorkflow {
   clientdata?: string;
 }
 
-interface DataverseFlowDefinition {
-  properties?: {
-    displayName?: string;
-    description?: string;
-    connectionReferences?: Record<string, {
-      displayName?: string;
-      connectorName?: string;
-      connectionName?: string;
-      iconUri?: string;
-    }>;
-    definition?: {
-      triggers?: Record<string, any>;
-      actions?: Record<string, {
-        type?: string;
-        description?: string;
-        inputs?: any;
-        outputs?: any;
-      }>;
-    };
-  };
-}
-
 // For use with type assertions to fix 'unknown' type issues
-interface ActionValue {
-  type?: string;
-  description?: string;
-  inputs?: any;
-  outputs?: any;
-}
+// interface ActionValue {
+//   type?: string;
+//   description?: string;
+//   inputs?: any;
+//   outputs?: any;
+// }
 
 export function useFlowService() {
   const { getAsJson, isLoaded, download } = usePowerToolsApi();
-  const dev = process.env.NODE_ENV === 'development';
 
   /**
    * Get a list of flows from the PowerPlatform
@@ -78,6 +66,31 @@ export function useFlowService() {
         throw new Error('PowerTools API not initialized. Please ensure you are running within PowerTools and have a valid connection.');
       }
       
+      // For testing/development without PowerTools connection
+      if (USE_MOCK_DATA) {
+        console.log('Using mock data for flows');
+        return mockFlowsResponse.value.map((flow: any) => {
+          const flowStatus = getFlowStatus(flow.statecode);
+          return {
+            id: flow.workflowid,
+            name: flow.name,
+            description: flow.description || '',
+            category: flow.category || 0,
+            createdOn: new Date(flow.createdon || Date.now()),
+            modifiedOn: new Date(flow.modifiedon || Date.now()),
+            status: flowStatus,
+            type: flow.type || 0,
+            createdBy: flow._createdby_value || '',
+            modifiedBy: flow._modifiedby_value || '',
+            owner: flow._ownerid_value || '',
+            state: flow.statecode,
+            clientData: flow.clientdata,
+            isManaged: flow.ismanaged,
+            selected: false
+          };
+        });
+      }
+      
       // In Dataverse Web API, query parameters must be passed directly in the URL
       // not as URLSearchParams object, as they need to be properly formatted
       const url = '/api/data/v9.2/workflows';
@@ -87,51 +100,82 @@ export function useFlowService() {
       params.append('$select', 'workflowid,name,statecode,statuscode,category,clientdata,description,ismanaged,type,modifiedon,createdon,_createdby_value,_modifiedby_value,_ownerid_value');
       params.append('$filter', 'category eq 5 and (statecode eq 0 or statecode eq 1)');
       
-      // Add cache buster separately
-      const cacheBuster = Date.now().toString();
-      
       console.log('Starting API request to get flows...');
       console.log('Request URL:', url);
       console.log('Request params:', params.toString());
       
-      const response = await getAsJson<DataverseResponse<any>>(url, params);
+      const response = await getAsJson<PowerToolsApiResponse>(url, params);
       console.log('API response received, structure:', Object.keys(response || {}));
       
+      // Handle PowerTools-specific response format
+      let jsonData: DataverseResponse<DataverseWorkflow>;
+      
+      // Check if response is a PowerTools wrapper with content property
+      if (response && typeof response.content === 'string') {
+        try {
+          console.log('Parsing content string from PowerTools response');
+          jsonData = JSON.parse(response.content);
+          console.log('Successfully parsed content from PowerTools response');
+        } catch (parseError) {
+          console.error('Failed to parse content from PowerTools response:', parseError);
+          throw new Error('Failed to parse API response content');
+        }
+      } else if (response && typeof response.asJson === 'function') {
+        // Use the asJson method if available
+        try {
+          console.log('Using asJson method from PowerTools response');
+          jsonData = await response.asJson();
+          console.log('Successfully got JSON from asJson method');
+        } catch (jsonError) {
+          console.error('Failed to get JSON using asJson method:', jsonError);
+          throw new Error('Failed to extract JSON data from API response');
+        }
+      } else {
+        // Try to use the response directly if it's already in the expected format
+        console.log('Using response directly as JSON data');
+        jsonData = response as unknown as DataverseResponse<DataverseWorkflow>;
+      }
+      
+      console.log('Parsed response data structure:', Object.keys(jsonData || {}));
+      
       // Check if the response contains an error
-      if (response.error) {
-        const errorCode = response.error.code || 'unknown';
-        const errorMessage = response.error.message || 'Unknown error occurred';
+      if (jsonData.error) {
+        const errorCode = jsonData.error.code || 'unknown';
+        const errorMessage = jsonData.error.message || 'Unknown error occurred';
         console.error(`API Error (${errorCode}): ${errorMessage}`);
         throw new Error(`Failed to retrieve flows: ${errorMessage}`);
       }
       
       // Check if the response contains the expected value array
-      if (!response.value || !Array.isArray(response.value)) {
-        console.error('Invalid API response format:', response);
+      if (!jsonData.value || !Array.isArray(jsonData.value)) {
+        console.error('Invalid API response format:', jsonData);
         throw new Error('Invalid API response: Expected an array of flows but received an invalid format. Please check your permissions and connection.');
       }
       
-      console.log(`Successfully received ${response.value.length} flows, first flow fields:`, 
-        response.value.length > 0 ? Object.keys(response.value[0]) : 'No flows found');
+      console.log(`Successfully received ${jsonData.value.length} flows, first flow fields:`, 
+        jsonData.value.length > 0 ? Object.keys(jsonData.value[0]) : 'No flows found');
         
-      return response.value.map((flow: any) => ({
-        id: flow.workflowid,
-        name: flow.name,
-        description: flow.description || '',
-        category: flow.category || 0,
-        createdOn: new Date(flow.createdon || Date.now()),
-        modifiedOn: new Date(flow.modifiedon || Date.now()),
-        status: flow.statecode === 1 ? 'Inactive' : 'Active',
-        type: flow.type || 0,
-        createdBy: flow._createdby_value || '',
-        modifiedBy: flow._modifiedby_value || '',
-        owner: flow._ownerid_value || '',
-        // Additional properties that might be used by the UI but not in the select query
-        state: flow.statecode,
-        clientData: flow.clientdata,
-        isManaged: flow.ismanaged,
-        selected: false
-      }));
+      return jsonData.value.map((flow: DataverseWorkflow) => {
+        const flowStatus = getFlowStatus(flow.statecode ?? 0);
+        return {
+          id: flow.workflowid,
+          name: flow.name,
+          description: flow.description || '',
+          category: flow.category || 0,
+          createdOn: new Date(flow.createdon || Date.now()),
+          modifiedOn: new Date(flow.modifiedon || Date.now()),
+          status: flowStatus,
+          type: flow.type || 0,
+          createdBy: flow._createdby_value || '',
+          modifiedBy: flow._modifiedby_value || '',
+          owner: flow._ownerid_value || '',
+          // Additional properties that might be used by the UI but not in the select query
+          state: flow.statecode ?? 0,
+          clientData: flow.clientdata,
+          isManaged: flow.ismanaged,
+          selected: false
+        };
+      });
     } catch (error) {
       console.error('Error getting flows:', error);
       // Provide detailed error information to the user
@@ -146,8 +190,6 @@ export function useFlowService() {
       } else {
         throw new Error('An unexpected error occurred while retrieving flows. Please try again later.');
       }
-      
-      // No mock data in production, only throw error
     }
   }, [isLoaded, getAsJson]);
 
@@ -162,6 +204,69 @@ export function useFlowService() {
         throw new Error('PowerTools API not initialized. Please ensure you are running within PowerTools and have a valid connection.');
       }
       
+      // For testing/development without PowerTools connection
+      if (USE_MOCK_DATA) {
+        console.log('Using mock data for flow details');
+        const mockFlowRecord = mockFlowsResponse.value.find(f => f.workflowid === flowId) || mockFlowsResponse.value[0];
+        
+        // Define interfaces for correct typing
+        interface MockTrigger {
+          type?: string;
+          kind?: string;
+          inputs?: any;
+        }
+        
+        interface MockAction {
+          type?: string;
+          description?: string;
+          inputs?: any;
+          outputs?: any;
+          runAfter?: { [key: string]: string[] };
+        }
+        
+        // Create mock triggers and actions from the mock definition
+        const triggers: FlowTriggerDetails[] = Object.entries(mockFlowDefinition.properties.definition?.triggers || {})
+          .map(([id, trigger]) => ({
+            id,
+            type: (trigger as MockTrigger).type,
+            kind: (trigger as MockTrigger).kind,
+            inputs: (trigger as MockTrigger).inputs
+          }));
+          
+        const actions: FlowAction[] = Object.entries(mockFlowDefinition.properties.definition?.actions || {})
+          .map(([id, action]) => ({
+            id,
+            name: id.replace(/_/g, ' '),
+            type: (action as MockAction).type,
+            description: (action as MockAction).description,
+            inputs: (action as MockAction).inputs,
+            outputs: (action as MockAction).outputs,
+            runAfter: (action as MockAction).runAfter
+          }));
+          
+        const connections: FlowConnector[] = Object.entries(mockFlowDefinition.properties.connectionReferences || {})
+          .map(([id, connection]) => ({
+            id,
+            displayName: connection.displayName || id,
+            connectorName: connection.connectorName || '',
+            connectionName: connection.connectionName || '',
+            iconUri: connection.iconUri || '',
+            count: 0,
+            critical: false
+          }));
+        
+        return {
+          id: flowId,
+          name: mockFlowRecord.name,
+          description: mockFlowRecord.description || '',
+          definition: mockFlowDefinition,
+          connectionReferences: connections,
+          actions: actions,
+          triggers: triggers,
+          childFlows: []
+        };
+      }
+      
       // Use the Dataverse API endpoint for a specific workflow with proper formatting
       // Format the URL without query parameters in it first
       const url = `/api/data/v9.2/workflows(${flowId})`;
@@ -173,33 +278,62 @@ export function useFlowService() {
       console.log('Requesting flow details from:', url);
       console.log('Request params:', params.toString());
       
-      const response = await getAsJson<DataverseWorkflow>(url, params);
+      const response = await getAsJson<PowerToolsApiResponse>(url, params);
       console.log('Flow details response structure:', Object.keys(response || {}));
       
+      // Handle PowerTools-specific response format
+      let workflowData: DataverseWorkflow;
+      
+      // Check if response is a PowerTools wrapper with content property
+      if (response && typeof response.content === 'string') {
+        try {
+          console.log('Parsing content string from PowerTools response');
+          workflowData = JSON.parse(response.content);
+          console.log('Successfully parsed content from PowerTools response');
+        } catch (parseError) {
+          console.error('Failed to parse content from PowerTools response:', parseError);
+          throw new Error('Failed to parse API response content');
+        }
+      } else if (response && typeof response.asJson === 'function') {
+        // Use the asJson method if available
+        try {
+          console.log('Using asJson method from PowerTools response');
+          workflowData = await response.asJson();
+          console.log('Successfully got JSON from asJson method');
+        } catch (jsonError) {
+          console.error('Failed to get JSON using asJson method:', jsonError);
+          throw new Error('Failed to extract JSON data from API response');
+        }
+      } else {
+        // Try to use the response directly if it's already in the expected format
+        console.log('Using response directly as JSON data');
+        workflowData = response as unknown as DataverseWorkflow;
+      }
+      
       // Verify response has the expected structure
-      if (!response || !response.workflowid) {
+      if (!workflowData || !workflowData.workflowid) {
         console.warn('API response missing workflow data');
         throw new Error('Invalid response from API: missing workflow data');
       }
       
       console.log('Flow details received:', {
-        id: response.workflowid,
-        name: response.name,
-        description: response.description,
-        category: response.category,
-        statecode: response.statecode,
-        type: response.type,
-        ismanaged: response.ismanaged,
-        hasClientData: !!response.clientdata,
-        clientDataLength: response.clientdata?.length
+        id: workflowData.workflowid,
+        name: workflowData.name,
+        description: workflowData.description,
+        category: workflowData.category,
+        statecode: workflowData.statecode,
+        type: workflowData.type,
+        ismanaged: workflowData.ismanaged,
+        hasClientData: !!workflowData.clientdata,
+        clientDataLength: workflowData.clientdata?.length
       });
       
       // Parse the clientdata field if it exists (contains the flow definition)
       let flowDefinition: WorkflowDefinition | null = null; // Use the defined interface
-      if (response.clientdata) {
+      if (workflowData.clientdata) {
         try {
           console.log('Attempting to parse clientdata');
-          flowDefinition = JSON.parse(response.clientdata);
+          flowDefinition = JSON.parse(workflowData.clientdata);
           console.log('Successfully parsed clientdata...');
           // Add more detailed logging if needed
         } catch (error) {
@@ -239,66 +373,117 @@ export function useFlowService() {
         };
       });
       
+      // Define interfaces for correct typing
+      interface TriggerValue {
+        type?: string;
+        kind?: string;
+        inputs?: any;
+      }
+      
+      interface ActionValue {
+        type?: string;
+        description?: string;
+        inputs?: any;
+        outputs?: any;
+        runAfter?: { [key: string]: string[] };
+        expression?: any;
+        actions?: any;
+        else?: any;
+      }
+      
       // Extract triggers from the workflow definition
       const triggers: FlowTriggerDetails[] = Object.entries(definitionTriggers).map(([key, value]) => {
         // Safely access properties
-        const triggerValue = value as any; // Cast to any for simplicity or define a strict type
+        const triggerValue = value as TriggerValue;
         return {
           id: key,
-          type: triggerValue?.type,
-          kind: triggerValue?.kind,
-          inputs: triggerValue?.inputs
+          type: triggerValue.type,
+          kind: triggerValue.kind,
+          inputs: triggerValue.inputs
         };
       });
       
-      // Recursive function to parse actions, including nested ones
+      // Parse actions from the workflow definition using recursive function
       const parseActions = (actionsObj: any): { [key: string]: FlowAction } => {
-          const parsedActions: { [key: string]: FlowAction } = {};
-          if (!actionsObj) return parsedActions;
+        const result: { [key: string]: FlowAction } = {};
+        if (!actionsObj || typeof actionsObj !== 'object') {
+          return result;
+        }
+        
+        Object.entries(actionsObj).forEach(([key, value]) => {
+          const actionValue = value as ActionValue;
+          const action: FlowAction = {
+            id: key,
+            name: key.replace(/_/g, ' '),
+            type: actionValue.type,
+            description: actionValue.description,
+            inputs: actionValue.inputs,
+            outputs: actionValue.outputs,
+            runAfter: actionValue.runAfter,
+            expression: actionValue.expression
+          };
           
-          Object.entries(actionsObj).forEach(([key, value]) => {
-            const actionValue = value as any; // Use any or define strict ActionDefinition
-            
-            // Recursively parse nested actions
-            const nestedActions = actionValue.actions ? parseActions(actionValue.actions) : undefined;
-            const elseActions = actionValue.else?.actions ? parseActions(actionValue.else.actions) : undefined;
-
-            parsedActions[key] = {
-              id: key,
-              name: key, // Consider extracting a display name if available
-              type: actionValue?.type,
-              kind: actionValue?.kind,
-              description: actionValue?.description,
-              inputs: actionValue?.inputs,
-              outputs: actionValue?.outputs,
-              runAfter: actionValue?.runAfter,
-              expression: actionValue?.expression,
-              actions: nestedActions, 
-              elseActions: elseActions
-            };
-          });
-          return parsedActions;
-        };
-
-      // Parse the top-level actions into an array for FlowDetails
-      const actionsObject = parseActions(definitionActions);
-      const actionsArray = Object.values(actionsObject);
-
+          // Handle nested actions (for If conditions, Switch, etc.)
+          if (actionValue.actions && typeof actionValue.actions === 'object') {
+            action.actions = parseActions(actionValue.actions);
+          }
+          
+          // Handle 'else' actions for If conditions
+          if (actionValue.else && typeof actionValue.else === 'object') {
+            action.elseActions = parseActions(actionValue.else);
+          }
+          
+          result[key] = action;
+        });
+        
+        return result;
+      };
+      
+      // Extract all actions as a flat array for easier processing
+      const actionsList: FlowAction[] = [];
+      const actionMap = parseActions(definitionActions);
+      
+      const flattenActions = (actionMap: { [key: string]: FlowAction }) => {
+        Object.values(actionMap).forEach(action => {
+          actionsList.push(action);
+          
+          // Recursively add nested actions
+          if (action.actions) {
+            flattenActions(action.actions);
+          }
+          
+          if (action.elseActions) {
+            flattenActions(action.elseActions);
+          }
+        });
+      };
+      
+      flattenActions(actionMap);
+      
       return {
-        id: flowId,
-        name: response.name || 'Unnamed Flow',
-        description: response.description || '',
-        definition: flowDefinition, // Store the parsed definition
+        id: workflowData.workflowid,
+        name: workflowData.name || 'Unnamed Flow',
+        description: workflowData.description || '',
+        definition: flowDefinition,
         connectionReferences: connectionReferences,
-        actions: actionsArray, // Use the parsed array of actions
-        triggers: triggers, // Use the parsed trigger details
+        actions: actionsList,
+        triggers: triggers,
+        childFlows: []
       };
     } catch (error) {
-      console.error(`Error getting details for flow ${flowId}:`, error);
+      console.error('Error getting flow details:', error);
+      
+      // Provide detailed error information to the user
       if (error instanceof Error) {
-        throw new Error(`Error fetching details: ${error.message}`);
+        if (error.message.includes('API not initialized')) {
+          throw new Error('PowerTools connection error: Please ensure you have selected a valid connection in the PowerTools panel.');
+        } else if (error.message.includes('Failed to fetch') || error.message.includes('Network error')) {
+          throw new Error('Network error: Unable to connect to the Power Platform API. Please check your internet connection and try again.');
+        } else {
+          throw new Error(`Error fetching flow details: ${error.message}`);
+        }
       } else {
-        throw new Error('An unexpected error occurred while fetching flow details.');
+        throw new Error('An unexpected error occurred while retrieving flow details. Please try again later.');
       }
     }
   }, [isLoaded, getAsJson]);
@@ -360,10 +545,10 @@ export function useFlowService() {
   }, [getFlowDetails]);
 
   // Analyze flow and gather data about connectors, issues, etc.
-  const analyzeFlow = useCallback(async (flowId: string): Promise<FlowAnalysisResult> => {
+  const analyzeFlow = useCallback(async (flowId: string, cachedFlowDetails?: FlowDetails): Promise<FlowAnalysisResult> => {
     try {
-      // Use getFlowDetailsWithChildren instead of getFlowDetails to get child flows too
-      const details = await getFlowDetailsWithChildren(flowId);
+      // Use provided flowDetails if available, otherwise fetch them
+      const details = cachedFlowDetails || await getFlowDetailsWithChildren(flowId);
       
       // Analyze connectors used in the flow
       const connectors = analyzeConnectors(details);
@@ -549,13 +734,13 @@ export function useFlowService() {
     // Use simpler Mermaid syntax without semicolons for better compatibility
     let diagram = `graph TD\n`;
     
-    // Each class definition needs a line break PLUS we need to add line prefix to ensure proper spacing
+    // Each class definition needs to be on its own line with proper spacing
     diagram += `classDef trigger fill:#FF9966,stroke:#FF6600,color:#000\n`;
     diagram += `classDef action fill:#99CCFF,stroke:#3366CC,color:#000\n`;
     diagram += `classDef condition fill:#FFCC99,stroke:#FF9933,color:#000\n`;
     diagram += `classDef expression fill:#C2FABC,stroke:#2ECC71,color:#000\n`;
     diagram += `classDef end fill:#EEEEEE,stroke:#999999,color:#000\n\n`;
-    
+
     // Flow diagram - simplified syntax
     diagram += `subgraph Flow["${flowDetails.name || 'Flow Diagram'}"]\n`;
     
@@ -647,7 +832,7 @@ export function useFlowService() {
     
     // Log the first 200 chars for debugging
     console.log('Generated diagram (first 200 chars):', diagram.substring(0, 200));
-    
+
     return diagram;
   }, []);
 
@@ -685,7 +870,7 @@ export function useFlowService() {
   const generateSimplifiedFlowDiagram = useCallback((flowDetails: FlowDetails): string => {
     if (!flowDetails || !flowDetails.definition) {
       console.warn("Cannot generate diagram: FlowDetails or definition missing.");
-      return 'graph TD\n  Error[\"Flow data incomplete\"]';
+      return 'graph TD\n  Error["Flow data incomplete"]';
     }
     
     // Function to recursively generate Mermaid syntax for actions and subgraphs
@@ -698,7 +883,6 @@ export function useFlowService() {
       
       let diagram = '';
       let nodeIdsInScope: string[] = [];
-      const actionMap = actionsToProcess;
       const actionList = Object.values(actionsToProcess);
 
       // 1. Define all nodes in the current scope
@@ -797,6 +981,7 @@ export function useFlowService() {
                 }
               } else if (connName.includes('sharepoint')) {
                 // SharePoint operations
+                // eslint-disable-next-line @typescript-eslint/no-unused-vars
                 const site = params.site || '';
                 const list = params.list || '';
                 const itemId = params.id || '';
@@ -969,9 +1154,6 @@ export function useFlowService() {
           nodeClass = 'expression';
         }
         
-        // Escape and wrap the label in quotes for Mermaid
-        const nodeLabel = JSON.stringify(nodeLabelText);
-        
         // Define node based on class/container type
         let nodeDefinition = '';
         if (safeActionType === 'If' || safeActionType === 'Switch') {
@@ -981,6 +1163,7 @@ export function useFlowService() {
             conditionDisplay = formatMultilineText(conditionDisplay, 50);
           }
           
+          // eslint-disable-next-line no-useless-escape
           nodeDefinition = `${nodeId}{${JSON.stringify(conditionDisplay)}}`;
           
           // For conditions, create a subgraph with the condition node as the title

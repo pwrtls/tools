@@ -32,7 +32,7 @@ The Flow Analyzer is built as a React application intended to run within the Pow
 ### Installation
 
 1. Clone the repository
-2. Navigate to the `flow-analyzer` directory
+2. Navigate to the `flowchart` directory
 3. Install dependencies:
    ```
    npm install

@@ -1,5 +1,5 @@
 import React from 'react';
-import { List, Card, Typography, Space, Tag, Button, Empty } from 'antd';
+import { List, Card, Typography, Space, Tag, Button, Empty, Checkbox } from 'antd';
 import { ArrowRightOutlined } from '@ant-design/icons';
 import { Flow } from '../models/Flow';
 
@@ -46,12 +46,16 @@ export const FlowList: React.FC<FlowListProps> = ({
               <Card
                 style={{ width: '100%' }}
                 title={
-                  <Space>
-                    <Title level={4} style={{ margin: 0 }}>
+                  <Space align="center">
+                    <Checkbox
+                      checked={selectedFlows.includes(flow.id)}
+                      onChange={(e) => onSelectFlow(flow.id, e.target.checked)}
+                    />
+                    <Title level={5} style={{ margin: 0 }}>
                       {flow.name}
                     </Title>
-                    <Tag color={flow.status === 'Active' ? 'green' : 'orange'}>
-                      {flow.status}
+                    <Tag color={flow.status.color}>
+                      {flow.status.label}
                     </Tag>
                   </Space>
                 }

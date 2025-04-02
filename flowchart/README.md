@@ -1,4 +1,4 @@
-# Power Automate Flow Analyzer & Documenter
+# Power Automate Flowchart
 
 A Power Tools extension for analyzing and documenting Power Automate flows. This tool helps administrators and developers understand, visualize, and document their Power Automate flows.
 
@@ -38,7 +38,7 @@ Key points about the API integration:
 1. Clone the repository:
    ```bash
    git clone https://github.com/pwrtls/tools.git
-   cd tools/flow-analyzer
+   cd tools/flowchart
    ```
 
 2. Install dependencies:
@@ -86,7 +86,7 @@ For development purposes, the tool includes mock data that simulates the Power P
 ### Project Structure
 
 ```
-flow-analyzer/
+flowchart/
 ├── src/
 │   ├── components/     # React components
 │   ├── models/         # TypeScript interfaces

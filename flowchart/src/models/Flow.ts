@@ -1,3 +1,5 @@
+import { FlowStatusInfo } from '../utils/flowStatus';
+
 export interface Flow {
   id: string;
   name: string;
@@ -5,7 +7,7 @@ export interface Flow {
   category: number;
   createdOn: Date;
   modifiedOn: Date;
-  status: string;
+  status: FlowStatusInfo;
   type: number;
   createdBy: string;
   modifiedBy: string;

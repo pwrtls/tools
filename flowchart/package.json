@@ -1,5 +1,5 @@
 {
-  "name": "flow-analyzer",
+  "name": "flowchart",
   "version": "0.1.0",
   "private": true,
   "license": "MIT",
@@ -14,6 +14,7 @@
     "@types/react-dom": "^18.0.0",
     "antd": "^5.0.0",
     "dayjs": "^1.11.7",
+    "jspdf": "^3.0.1",
     "mermaid": "^10.6.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
@@ -45,5 +46,8 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
+  },
+  "devDependencies": {
+    "@types/jspdf": "^2.0.0"
   }
-} 
+}

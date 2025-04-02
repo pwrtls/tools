@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Layout, Row, Col, Card, Space, Spin, Alert, Result, Input, Button, Typography, Checkbox, message } from 'antd';
-import { ArrowLeftOutlined, SearchOutlined, FileTextOutlined, FileOutlined, DownloadOutlined } from '@ant-design/icons';
+import { Layout, Row, Col, Card, Spin, Alert, Result, Input, Button, Checkbox, message } from 'antd';
+import { ArrowLeftOutlined, SearchOutlined, FileTextOutlined } from '@ant-design/icons';
 import { FlowList } from './components/FlowList';
 import { FlowVisualizer } from './components/FlowVisualizer';
 import { DocumentGenerator } from './components/DocumentGenerator';
@@ -11,7 +11,6 @@ import './App.css';
 
 const { Header, Content } = Layout;
 const { Search } = Input;
-const { Title } = Typography;
 
 const AppContent: React.FC = () => {
   const [selectedFlow, setSelectedFlow] = useState<Flow | null>(null);
@@ -29,18 +28,11 @@ const AppContent: React.FC = () => {
   const { 
     isLoaded, 
     analyzeFlow, 
-    getFlowDetails, 
     getFlowDetailsWithChildren,
     getFlows, 
     testApiConnection 
   } = useFlowService();
 
-  useEffect(() => {
-    if (selectedFlow && !flowAnalysis) {
-      analyzeSelectedFlow();
-    }
-  }, [selectedFlow]);
-  
   // Load flows on component mount
   useEffect(() => {
     let isMounted = true;
@@ -151,39 +143,58 @@ const AppContent: React.FC = () => {
     }
   };
 
-  const analyzeSelectedFlow = async () => {
+  const analyzeSelectedFlow = useCallback(async () => {
     if (!selectedFlow) return;
 
     try {
       setLoading(true);
       
-      // Use getFlowDetailsWithChildren instead of getFlowDetails to include child flows
-      const details = await getFlowDetailsWithChildren(selectedFlow.id);
-      console.log('Flow details loaded:', {
-        id: details.id,
-        name: details.name,
-        actionsLength: details.actions.length,
-        triggersLength: details.triggers.length,
-        connectionReferencesLength: details.connectionReferences.length,
-        childFlowsLength: details.childFlows?.length || 0 // Log child flows count
-      });
-      setFlowDetails(details);
+      // Check if we already have flow details for this flow
+      let details = flowDetails;
+      if (!details || details.id !== selectedFlow.id) {
+        // Only fetch details if we don't have them or they're for a different flow
+        console.log('Fetching flow details for', selectedFlow.id);
+        details = await getFlowDetailsWithChildren(selectedFlow.id);
+        console.log('Flow details loaded:', {
+          id: details.id,
+          name: details.name,
+          actionsLength: details.actions.length,
+          triggersLength: details.triggers.length,
+          connectionReferencesLength: details.connectionReferences.length,
+          childFlowsLength: details.childFlows?.length || 0
+        });
+        setFlowDetails(details);
+      } else {
+        console.log('Using existing flow details, no need to refetch');
+      }
       
-      // Then analyze the flow (analyzeFlow now uses getFlowDetailsWithChildren internally)
-      const analysis = await analyzeFlow(selectedFlow.id);
-      console.log('Flow analysis completed:', {
-        connectorsLength: analysis.connectors.length,
-        issuesLength: analysis.issues.length,
-        recommendationsLength: analysis.recommendations.length
-      });
-      setFlowAnalysis(analysis);
+      // Similarly, only analyze if we don't already have analysis results
+      if (!flowAnalysis) {
+        // Pass the cached details to analyzeFlow to avoid redundant API calls
+        const analysis = await analyzeFlow(selectedFlow.id, details);
+        console.log('Flow analysis completed:', {
+          connectorsLength: analysis.connectors.length,
+          issuesLength: analysis.issues.length,
+          recommendationsLength: analysis.recommendations.length
+        });
+        setFlowAnalysis(analysis);
+      } else {
+        console.log('Using existing flow analysis, no need to reanalyze');
+      }
     } catch (err) {
       console.error('Error analyzing flow:', err);
       setError('Failed to analyze the flow. Please try again.');
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedFlow, flowDetails, flowAnalysis, analyzeFlow, getFlowDetailsWithChildren]);
+
+  // Add effect to analyze selected flow when it changes
+  useEffect(() => {
+    if (selectedFlow && !flowAnalysis) {
+      analyzeSelectedFlow();
+    }
+  }, [selectedFlow, flowAnalysis, analyzeSelectedFlow]);
 
   // Add a function to test the API connection
   const handleTestConnection = async () => {
@@ -308,71 +319,6 @@ const AppContent: React.FC = () => {
     return null;
   };
 
-  // Check if all filtered flows are selected
-  const isAllSelected = filteredFlows.length > 0 && 
-    filteredFlows.every(flow => selectedFlows.includes(flow.id));
-
-  // Render the flow list view with error handling
-  const renderFlowListContent = () => {
-    if (error) {
-      return (
-        <Result
-          status="error"
-          title="Error Loading Flows"
-          subTitle={error}
-          extra={[
-            <Button 
-              key="retry" 
-              type="primary" 
-              onClick={() => {
-                setError(null);
-                setFlowsLoading(true);
-              }}
-            >
-              Retry
-            </Button>,
-            <Button
-              key="test"
-              onClick={handleTestConnection}
-            >
-              Test Connection
-            </Button>
-          ]}
-        />
-      );
-    }
-    
-    if (flowsLoading) {
-      return (
-        <div style={{ textAlign: 'center', padding: '50px 0' }}>
-          <Spin size="large" />
-          <div style={{ marginTop: 16 }}>Loading flows from Power Platform...</div>
-        </div>
-      );
-    }
-    
-    if (flows.length === 0) {
-      return (
-        <Result
-          status="info"
-          title="No Flows Found"
-          subTitle="No cloud flows were found in this environment. Make sure you have the necessary permissions."
-        />
-      );
-    }
-    
-    return (
-      <FlowList 
-        onFlowSelect={handleFlowSelect}
-        searchText={searchText}
-        filteredFlows={filteredFlows}
-        selectedFlows={selectedFlows}
-        onSelectFlow={handleFlowSelection}
-        loading={flowsLoading}
-      />
-    );
-  };
-
   return (
     <Layout className="app-container">
       <Header style={{ background: '#fff', padding: '0 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -390,45 +336,84 @@ const AppContent: React.FC = () => {
           </>
         ) : (
           <>
-            <div className="header-search" style={{ display: 'flex', flexGrow: 1 }}>
-              <Search
-                placeholder="Search flows by name or description"
-                allowClear
-                enterButton={<SearchOutlined />}
-                size="middle"
-                value={searchText}
-                onChange={e => setSearchText(e.target.value)}
-                onSearch={handleSearch}
-                style={{ width: '400px' }}
-              />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+              <Checkbox
+                onChange={(e) => handleSelectAll(e.target.checked)}
+                checked={selectedFlows.length === filteredFlows.length && filteredFlows.length > 0}
+              >
+                Select All
+              </Checkbox>
+              <Button
+                icon={<FileTextOutlined />}
+                onClick={handleBatchDocumentation}
+                disabled={selectedFlows.length === 0}
+              >
+                Generate Documentation ({selectedFlows.length})
+              </Button>
             </div>
-            <div className="header-actions">
-              <Space>
-                <Checkbox 
-                  checked={isAllSelected} 
-                  onChange={e => handleSelectAll(e.target.checked)}
-                  disabled={filteredFlows.length === 0 || flowsLoading}
-                >
-                  Select All
-                </Checkbox>
-                <Button
-                  type="primary"
-                  icon={<FileTextOutlined />}
-                  onClick={handleBatchDocumentation}
-                  disabled={selectedFlows.length === 0}
-                >
-                  Generate Documentation ({selectedFlows.length})
-                </Button>
-              </Space>
-            </div>
+            <Search
+              placeholder="Search flows by name or description"
+              allowClear
+              enterButton={<SearchOutlined />}
+              size="middle"
+              value={searchText}
+              onChange={(e) => handleSearch(e.target.value)}
+              style={{ width: 400 }}
+            />
           </>
         )}
       </Header>
-      <Content style={{ padding: '24px' }}>
+      <Content style={{ padding: '24px', backgroundColor: '#f0f2f5' }}>
         {isAnalysisView ? (
           renderAnalysisContent()
         ) : (
-          renderFlowListContent()
+          <>
+            {error ? (
+              <Result
+                status="error"
+                title="Error Loading Flows"
+                subTitle={error}
+                extra={[
+                  <Button 
+                    key="retry" 
+                    type="primary" 
+                    onClick={() => {
+                      setError(null);
+                      setFlowsLoading(true);
+                    }}
+                  >
+                    Retry
+                  </Button>,
+                  <Button
+                    key="test"
+                    onClick={handleTestConnection}
+                  >
+                    Test Connection
+                  </Button>
+                ]}
+              />
+            ) : flowsLoading ? (
+              <div style={{ textAlign: 'center', padding: '50px 0' }}>
+                <Spin size="large" />
+                <div style={{ marginTop: 16 }}>Loading flows from Power Platform...</div>
+              </div>
+            ) : flows.length === 0 ? (
+              <Result
+                status="info"
+                title="No Flows Found"
+                subTitle="No cloud flows were found in this environment. Make sure you have the necessary permissions."
+              />
+            ) : (
+              <FlowList
+                onFlowSelect={handleFlowSelect}
+                searchText={searchText}
+                filteredFlows={filteredFlows}
+                selectedFlows={selectedFlows}
+                onSelectFlow={handleFlowSelection}
+                loading={flowsLoading}
+              />
+            )}
+          </>
         )}
       </Content>
     </Layout>
