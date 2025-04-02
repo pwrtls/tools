@@ -19,7 +19,7 @@ export const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({ flow, flow
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [exportFormat, setExportFormat] = useState<'markdown' | 'pdf' | 'text'>('markdown');
   const [isGenerating, setIsGenerating] = useState(false);
-  const { downloadDocumentation, generateSimplifiedFlowDiagram } = useFlowService();
+  const { downloadDocumentation, generateFlowDiagram } = useFlowService();
   const diagramContainerRef = useRef<HTMLDivElement>(null);
 
   const showModal = () => {
@@ -61,7 +61,7 @@ export const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({ flow, flow
           });
           
           // Step 2: Generate diagram definition
-          const diagramDefinition = generateSimplifiedFlowDiagram(flowDetails);
+          const diagramDefinition = generateFlowDiagram(flowDetails);
           
           // Step 3: Create a temporary div for rendering
           const tempDiv = document.createElement('div');

@@ -783,169 +783,13 @@ export function useFlowService() {
 
   // Function to generate a Mermaid diagram from flow details
   const generateFlowDiagram = useCallback((flowDetails: FlowDetails): string => {
-    if (!flowDetails || !flowDetails.actions || !flowDetails.triggers) {
-      console.warn('Missing flow details for diagram generation');
-      return '';
-    }
-
-    // Extract data for the diagram
-    const { triggers, actions, connectionReferences } = flowDetails;
-    
-    // Count different types of nodes for statistics
-    const nodeStats = {
-      triggers: triggers.length,
-      actions: actions.length,
-      conditions: actions.filter(a => a.type?.includes('Condition') || false).length,
-      expressions: actions.filter(a => a.type?.includes('Expression') || false).length
-    };
-    
-    // Get a list of connectors used in the flow
-    const connectors = connectionReferences.map(c => c.connectorName || c.displayName);
-    
-    // Use simpler Mermaid syntax without semicolons for better compatibility
-    let diagram = `graph TD\n`;
-    
-    // Each class definition needs to be on its own line with proper spacing
-    diagram += `classDef trigger fill:#FF9966,stroke:#FF6600,color:#000\n`;
-    diagram += `classDef action fill:#99CCFF,stroke:#3366CC,color:#000\n`;
-    diagram += `classDef condition fill:#FFCC99,stroke:#FF9933,color:#000\n`;
-    diagram += `classDef expression fill:#C2FABC,stroke:#2ECC71,color:#000\n`;
-    diagram += `classDef end fill:#EEEEEE,stroke:#999999,color:#000\n\n`;
-
-    // Flow diagram - simplified syntax
-    diagram += `subgraph Flow["${flowDetails.name || 'Flow Diagram'}"]\n`;
-    
-    // Add triggers as nodes
-    triggers.forEach((triggerName, index) => {
-      const triggerId = `T${index}`;
-      diagram += `  ${triggerId}["${triggerName}"]\n`;
-      diagram += `  class ${triggerId} trigger\n`;
-    });
-    
-    // Add actions as nodes with appropriate shapes
-    actions.forEach((action, index) => {
-      const actionId = `A${index}`;
-      const name = action.name || 'Action';
-      
-      // Determine node shape based on type
-      if (action.type?.includes('Condition')) {
-        diagram += `  ${actionId}{"${name}"}\n`;
-        diagram += `  class ${actionId} condition\n`;
-      } else if (action.type?.includes('Expression')) {
-        diagram += `  ${actionId}>"${name}"]\n`;
-        diagram += `  class ${actionId} expression\n`;
-      } else {
-        diagram += `  ${actionId}["${name}"]\n`;
-        diagram += `  class ${actionId} action\n`;
-      }
-    });
-    
-    // Add end node
-    diagram += `  END([End])\n`;
-    diagram += `  class END end\n`;
-    
-    // Connect triggers to first actions (simplified logic)
-    triggers.forEach((trigger, index) => {
-      if (actions.length > 0) {
-        // In a simplified model, connect trigger to first action
-        diagram += `  T${index} --> A0\n`;
-      }
-    });
-    
-    // Connect actions in sequence (simplified for compatibility)
-    for (let i = 0; i < actions.length - 1; i++) {
-      diagram += `  A${i} --> A${i+1}\n`;
-    }
-    
-    // Connect last action to END
-    if (actions.length > 0) {
-      diagram += `  A${actions.length - 1} --> END\n`;
-    }
-    
-    diagram += `end\n\n`;
-    
-    // Add flow details and statistics in a separate subgraph
-    diagram += `subgraph Stats["Flow Statistics"]\n`;
-    diagram += `  Triggers["Triggers: ${nodeStats.triggers}"]\n`;
-    diagram += `  Actions["Actions: ${nodeStats.actions}"]\n`;
-    if (nodeStats.conditions > 0) {
-      diagram += `  Conditions["Conditions: ${nodeStats.conditions}"]\n`;
-    }
-    if (nodeStats.expressions > 0) {
-      diagram += `  Expressions["Expressions: ${nodeStats.expressions}"]\n`;
-    }
-    diagram += `end\n\n`;
-    
-    // Add connectors used
-    if (connectors.length > 0) {
-      diagram += `subgraph Conn["Connectors Used"]\n`;
-      connectors.forEach((connector, index) => {
-        if (connector) {
-          diagram += `  C${index}["${connector}"]\n`;
-        }
-      });
-      diagram += `end\n\n`;
-    }
-    
-    // Add diagram key in a separate subgraph
-    diagram += `subgraph Legend["Flow Diagram Legend"]\n`;
-    diagram += `  LT["Trigger"]\n`;
-    diagram += `  class LT trigger\n`;
-    diagram += `  LA["Action"]\n`;
-    diagram += `  class LA action\n`;
-    diagram += `  LC{"Condition"}\n`;
-    diagram += `  class LC condition\n`;
-    diagram += `  LE>"Expression"]\n`;
-    diagram += `  class LE expression\n`;
-    diagram += `  LEND([End])\n`;
-    diagram += `  class LEND end\n`;
-    diagram += `end\n`;
-    
-    // Log the first 200 chars for debugging
-    console.log('Generated diagram (first 200 chars):', diagram.substring(0, 200));
-
-    return diagram;
-  }, []);
-
-  // Generate a very basic, simplified test diagram that is guaranteed to work
-  const generateTestDiagram = useCallback((): string => {
-    return `graph TD
-    A[Start] --> B[Process]
-    B --> C[End]
-    
-    class A fill:#FF9966,stroke:#FF6600
-    class B fill:#99CCFF,stroke:#3366CC
-    class C fill:#EEEEEE,stroke:#999999`;
-  }, []);
-
-  // For testing purposes - generate a test connection request
-  const testApiConnection = useCallback(async (): Promise<boolean> => {
-    try {
-      const url = '/api/data/v9.2/workflows';
-      const params = new URLSearchParams();
-      params.append('$select', 'workflowid,name');
-      params.append('$top', '1');
-      
-      console.log('Testing API connection...');
-      const response = await getAsJson<any>(url, params);
-      
-      console.log('Connection test response:', response);
-      return true;
-    } catch (error) {
-      console.error('API Connection test failed:', error);
-      return false;
-    }
-  }, [getAsJson]);
-
-  // Generate a simplified version of the diagram for actual flows
-  const generateSimplifiedFlowDiagram = useCallback((flowDetails: FlowDetails): string => {
     if (!flowDetails || !flowDetails.definition) {
       console.warn("Cannot generate diagram: FlowDetails or definition missing.");
       return 'graph TD\n  Error["Flow data incomplete"]';
     }
     
     // Function to recursively generate Mermaid syntax for actions and subgraphs
-    // This function is defined *inside* generateSimplifiedFlowDiagram to access flowDetails etc.
+    // This function is defined *inside* generateFlowDiagram to access flowDetails etc.
     const generateMermaidForScope = ( 
         actionsToProcess: { [key: string]: FlowAction }, 
         parentPrefix: string,
@@ -1505,6 +1349,36 @@ export function useFlowService() {
     return result;
   };
 
+  // Generate a very basic, simplified test diagram that is guaranteed to work
+  const generateTestDiagram = useCallback((): string => {
+    return `graph TD
+    A[Start] --> B[Process]
+    B --> C[End]
+    
+    class A fill:#FF9966,stroke:#FF6600
+    class B fill:#99CCFF,stroke:#3366CC
+    class C fill:#EEEEEE,stroke:#999999`;
+  }, []);
+
+  // For testing purposes - generate a test connection request
+  const testApiConnection = useCallback(async (): Promise<boolean> => {
+    try {
+      const url = '/api/data/v9.2/workflows';
+      const params = new URLSearchParams();
+      params.append('$select', 'workflowid,name');
+      params.append('$top', '1');
+      
+      console.log('Testing API connection...');
+      const response = await getAsJson<any>(url, params);
+      
+      console.log('Connection test response:', response);
+      return true;
+    } catch (error) {
+      console.error('API Connection test failed:', error);
+      return false;
+    }
+  }, [getAsJson]);
+
   return {
     isLoaded,
     getFlows,
@@ -1515,7 +1389,6 @@ export function useFlowService() {
     mockMethods,
     generateFlowDiagram,
     generateTestDiagram,
-    generateSimplifiedFlowDiagram,
     testApiConnection
   };
 }

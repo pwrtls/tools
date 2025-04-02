@@ -55,7 +55,7 @@ export const FlowVisualizer: React.FC<FlowVisualizerProps> = ({ flow, flowDetail
   const [zoom, setZoom] = useState(1);
   const [isRendering, setIsRendering] = useState(false);
   
-  const { generateFlowDiagram, generateSimplifiedFlowDiagram } = useFlowService();
+  const { generateFlowDiagram } = useFlowService();
   const { download } = usePowerToolsApi();
 
   useEffect(() => {
@@ -119,24 +119,6 @@ export const FlowVisualizer: React.FC<FlowVisualizerProps> = ({ flow, flowDetail
         const diagramId = `flowdiagram-${safeId}-${Date.now()}`;
         console.log(`Using diagram ID: ${diagramId}`);
         
-        // We'll use the flowDetails directly rather than fetching them again
-        // No need to call getFlowDetailsWithChildren here
-        
-        // Generate the diagram from the flow details
-        const diagramDefinition = generateFlowDiagram(flowDetails);
-        console.log('Generated diagram definition length:', diagramDefinition.length);
-        console.log('First 100 chars of diagram:', diagramDefinition.substring(0, 100));
-        
-        // Log parsed diagram details for debugging
-        try {
-          console.log('Attempting to parse diagram with mermaid.parse');
-          await mermaid.parse(diagramDefinition);
-          console.log('Diagram parsed successfully');
-        } catch (parseError) {
-          console.error('Mermaid parse error:', parseError);
-          // Continue with rendering despite parse error - mermaid.init may still work
-        }
-        
         if (containerRef.current) {
           // Clear existing content
           console.log('Container ref is available, clearing previous content');
@@ -146,21 +128,17 @@ export const FlowVisualizer: React.FC<FlowVisualizerProps> = ({ flow, flowDetail
           console.log('Creating diagram container');
           const diagramContainer = document.createElement('div');
           diagramContainer.id = diagramId;
-          diagramContainer.innerHTML = generateSimplifiedFlowDiagram(flowDetails);
+          diagramContainer.innerHTML = generateFlowDiagram(flowDetails);
           containerRef.current.appendChild(diagramContainer);
           
-          // Render the simplified diagram with mermaid
-          console.log('Using simplified flow diagram (1881 chars, first 100 chars):\n' + 
-                    diagramContainer.innerHTML.substring(0, 100) + '...');
-          
-          // Use mermaid.init to render all diagrams in the container
+          // Render the diagram with mermaid
           console.log(`Attempting to render flow diagram with ID: ${diagramId}`);
           try {
             console.log('Using mermaid.init to process all diagrams in the container');
             await mermaid.init(undefined, document.querySelectorAll(`#${diagramId}`));
             
             // Get the rendered SVG and store it in state
-            console.log('Flow diagram rendered successfully with simplified method');
+            console.log('Flow diagram rendered successfully');
             const svgElement = diagramContainer.querySelector('svg');
             if (svgElement) {
               setSvg(svgElement.outerHTML);
@@ -195,7 +173,7 @@ export const FlowVisualizer: React.FC<FlowVisualizerProps> = ({ flow, flowDetail
       console.log('FlowVisualizer unmounting, cleaning up');
       // Any cleanup needed
     };
-  }, [flow, flowDetails, generateFlowDiagram, generateSimplifiedFlowDiagram, isRendering]);
+  }, [flow, flowDetails, generateFlowDiagram, isRendering]);
   
   // Convert SVG to PNG
   const convertSvgToPng = async (svgString: string): Promise<Blob> => {
