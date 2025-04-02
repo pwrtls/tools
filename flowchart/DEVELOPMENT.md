@@ -12,8 +12,12 @@ The Flow Analyzer is built as a React application intended to run within the Pow
    - Provides server-side search functionality filtering flows by name and description
    - Supports filtering and selection for batch operations
 2. **FlowVisualizer**: Renders a visual representation of the flow using Mermaid.js
+   - Uses an advanced diagram generation algorithm that visualizes complex flow structures
+   - Handles various action types including conditions, loops, child flows, and API connectors
+   - Generates properly formatted Mermaid syntax for reliable rendering
 3. **FlowAnalyzer**: Analyzes flow structure, detects issues, and generates recommendations
 4. **DocumentGenerator**: Creates documentation in various formats (Markdown, PDF, Text)
+   - Embeds the same flow visualization used in the UI for consistency
 
 ### Data Flow
 
@@ -58,6 +62,17 @@ The Flow Analyzer uses the Microsoft Dataverse Web API to interact with Power Au
 - `/api/data/v9.2/workflows({id})` - Get details for a specific flow
 
 The API integration is handled through the PowerTools API interface, which provides an authenticated connection to the Dataverse API.
+
+### Pagination Implementation
+
+The Flow Analyzer uses skiptoken-based pagination for navigating through large datasets in Dataverse:
+
+1. **Initial request**: Uses only the `$top` parameter to limit results
+2. **Subsequent pages**: Uses `$skiptoken` parameter instead of `$skip` offset 
+   - The skiptoken is obtained from the `@odata.nextLink` in the previous response
+   - Example: `/api/data/v9.2/workflows?$skiptoken=<token>`
+
+This approach is required because Dataverse doesn't support the traditional `$skip` parameter for pagination. A token caching mechanism is implemented to optimize navigation between pages, avoiding unnecessary API calls.
 
 ### Flow Structure
 

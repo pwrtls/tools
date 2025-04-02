@@ -1,0 +1,57 @@
+/* Remove header background colors */
+.summary-card .ant-card-head,
+.connectors-card .ant-card-head,
+.issues-card .ant-card-head,
+.flowchart-card .ant-card-head {
+  background-color: transparent;
+}
+
+.ant-card {
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  transition: box-shadow 0.3s;
+}
+
+.ant-card:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.09);
+}
+
+/* List styling */
+.connectors-card ul li {
+  margin-bottom: 4px;
+}
+
+/* Flow summary styling */
+.summary-card .ant-card-body p {
+  font-size: 16px;
+  margin-bottom: 0;
+}
+
+/* Issues styling */
+.issues-card h3 {
+  border-bottom: 1px solid #f0f0f0;
+  padding-bottom: 8px;
+  margin-top: 0;
+}
+
+/* Make the flowchart area more prominent */
+.flowchart-card {
+  margin-top: 12px;
+}
+
+.flowchart-container {
+  min-height: 500px;
+  min-width: 100%;
+}
+
+/* Ensure text in SVG nodes doesn't get cut off */
+svg g.node foreignObject {
+  overflow: visible;
+  width: auto !important;
+}
+
+svg g.node div {
+  white-space: normal;
+  word-wrap: break-word;
+  overflow: visible;
+  padding: 8px;
+} 

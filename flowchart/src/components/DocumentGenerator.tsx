@@ -77,8 +77,36 @@ export const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({ flow, flow
             // Step 4: Render the diagram to the div
             const { svg } = await mermaid.render(`diagram-${Date.now()}`, diagramDefinition);
             
-            // Step 5: Create an SVG element with the rendered content
-            tempDiv.innerHTML = svg;
+            // Step 5: Clean the SVG content for XML compatibility
+            let cleanedSvg = svg
+              .replace(/<br>/g, '<br/>')
+              .replace(/<hr>/g, '<hr/>')
+              .replace(/<img([^>]*)>/g, '<img$1/>')
+              .replace(/<input([^>]*)>/g, '<input$1/>')
+              .replace(/<br([^>]*)><\/span>/g, '<br$1/></span>')
+              .replace(/&nbsp;/g, '&#160;');
+            
+            // Verify it's well-formed XML
+            try {
+              const parser = new DOMParser();
+              const xmlDoc = parser.parseFromString(cleanedSvg, 'image/svg+xml');
+              
+              // Check for parsing errors
+              const parserErrors = xmlDoc.getElementsByTagName('parsererror');
+              if (parserErrors.length === 0) {
+                // Re-serialize if no errors to ensure clean XML
+                const serializer = new XMLSerializer();
+                cleanedSvg = serializer.serializeToString(xmlDoc);
+              } else {
+                console.warn('XML parsing errors in PDF generation, using basic cleanup');
+              }
+            } catch (parseError) {
+              console.warn('Error during XML parsing cleanup for PDF:', parseError);
+              // Continue with basic cleaned version
+            }
+            
+            // Step 6: Create an SVG element with the cleaned rendered content
+            tempDiv.innerHTML = cleanedSvg;
             
             // Get the SVG element
             const svgElement = tempDiv.querySelector('svg');
@@ -103,10 +131,14 @@ export const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({ flow, flow
                 
                 // Convert SVG to an image
                 const image = new Image();
+                // Add crossOrigin attribute to prevent tainted canvas
+                image.crossOrigin = 'anonymous';
                 
-                // Create a data URL from the SVG
+                // Create a data URL from the SVG using base64 encoding
                 const svgAsXML = new XMLSerializer().serializeToString(svgElement);
-                const svgData = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svgAsXML)))}`;
+                const svgWithXmlDeclaration = '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n' + svgAsXML;
+                const base64SVG = btoa(unescape(encodeURIComponent(svgWithXmlDeclaration)));
+                const svgData = `data:image/svg+xml;base64,${base64SVG}`;
                 
                 // Wait for the image to load
                 await new Promise<void>((resolve, reject) => {

@@ -8,6 +8,7 @@ import { Flow, FlowDetails, FlowAnalysisResult } from './models/Flow';
 import { PowerToolsContextProvider } from './powertools/context';
 import { useFlowService, PaginatedFlowsResponse } from './api/flowService';
 import './App.css';
+import './flowchart.css';
 
 const { Header, Content } = Layout;
 const { Search } = Input;
@@ -285,58 +286,113 @@ const AppContent: React.FC = () => {
       return (
         <div>
           <Row gutter={[16, 16]}>
+            {/* Flow Summary Section - full width */}
             <Col span={24}>
               <Card 
-                title="Flow Visualization" 
-                extra={<DocumentGenerator flow={selectedFlow} flowDetails={flowDetails} analysis={flowAnalysis} />}
+                title="Flow Summary" 
+                className="summary-card"
               >
-                <FlowVisualizer flow={selectedFlow} flowDetails={flowDetails} />
+                <div>
+                  <p>
+                    <strong>Triggers:</strong> {flowDetails.triggers?.length || 0} | 
+                    <strong> Actions:</strong> {flowDetails.actions?.length || 0} | 
+                    <strong> Connectors:</strong> {flowDetails.connectionReferences?.length || 0}
+                  </p>
+                </div>
               </Card>
             </Col>
-          </Row>
-          
-          <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
-            <Col span={12}>
-              <Card title="Connectors">
-                <ul>
-                  {flowAnalysis.connectors.map((connector, index) => (
-                    <li key={index}>
-                      <strong>{connector.displayName}</strong>
-                      {connector.critical && <span style={{ color: 'red' }}> (Critical)</span>}
-                      {connector.count && <span> - {connector.count} references</span>}
-                    </li>
-                  ))}
-                </ul>
-              </Card>
-            </Col>
-            <Col span={12}>
-              <Card title="Issues & Recommendations">
-                {flowAnalysis.issues.length > 0 ? (
-                  <ul>
-                    {flowAnalysis.issues.map((issue, index) => (
-                      <li key={index}>
-                        <strong>[{issue.severity}]</strong> {issue.description}
-                        {issue.impact && <div><small>Impact: {issue.impact}</small></div>}
+
+            {/* Connectors and Issues & Recommendations on same row */}
+            <Col xs={24} md={12}>
+              {flowDetails.connectionReferences && flowDetails.connectionReferences.length > 0 && (
+                <Card 
+                  title="Connectors" 
+                  className="connectors-card"
+                  style={{ height: '100%' }}
+                >
+                  <ul style={{ paddingLeft: '20px', margin: 0 }}>
+                    {flowDetails.connectionReferences.map((connector, index) => (
+                      <li key={`connector-${index}`}>
+                        <strong>{connector.displayName}</strong>
+                        {connector.connectorName && ` (${connector.connectorName})`}
+                        {connector.critical && <span style={{ color: 'red', marginLeft: '8px' }}>Critical</span>}
                       </li>
                     ))}
                   </ul>
-                ) : (
-                  <div>No issues detected.</div>
-                )}
-                
-                {flowAnalysis.recommendations.length > 0 && (
-                  <>
-                    <h4>Recommendations</h4>
-                    <ul>
-                      {flowAnalysis.recommendations.map((recommendation, index) => (
-                        <li key={index}>
-                          <strong>{recommendation.title}</strong> ({recommendation.priority})
-                          <div>{recommendation.description}</div>
-                        </li>
-                      ))}
-                    </ul>
-                  </>
-                )}
+                </Card>
+              )}
+            </Col>
+
+            {/* Issues & Recommendations Section - beside connectors */}
+            <Col xs={24} md={12}>
+              {(flowAnalysis.issues?.length > 0 || flowAnalysis.recommendations?.length > 0) && (
+                <Card 
+                  title="Issues & Recommendations" 
+                  className="issues-card"
+                  style={{ height: '100%' }}
+                >
+                  <Row gutter={[16, 0]}>
+                    {/* Issues Section */}
+                    <Col span={flowAnalysis.recommendations?.length > 0 ? 12 : 24}>
+                      {flowAnalysis.issues && flowAnalysis.issues.length > 0 && (
+                        <div style={{ marginBottom: '16px' }}>
+                          <h3>Issues</h3>
+                          <ul style={{ paddingLeft: '20px' }}>
+                            {flowAnalysis.issues.map((issue, index) => (
+                              <li key={`issue-${index}`} style={{ marginBottom: '8px' }}>
+                                <div>
+                                  <strong style={{ 
+                                    color: issue.severity === 'Error' ? 'red' : 
+                                          issue.severity === 'Warning' ? 'orange' : 'gray'
+                                  }}>
+                                    {issue.severity}:
+                                  </strong> {issue.description}
+                                </div>
+                                {issue.impact && (
+                                  <div style={{ fontSize: '0.9em', marginTop: '4px' }}>
+                                    <em>Impact: {issue.impact}</em>
+                                  </div>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </Col>
+
+                    {/* Recommendations Section */}
+                    <Col span={flowAnalysis.issues?.length > 0 ? 12 : 24}>
+                      {flowAnalysis.recommendations && flowAnalysis.recommendations.length > 0 && (
+                        <div>
+                          <h3>Recommendations</h3>
+                          <ul style={{ paddingLeft: '20px' }}>
+                            {flowAnalysis.recommendations.map((rec, index) => (
+                              <li key={`rec-${index}`} style={{ marginBottom: '8px' }}>
+                                <div><strong>{rec.title}</strong> ({rec.priority})</div>
+                                <div style={{ fontSize: '0.9em', marginTop: '4px' }}>{rec.description}</div>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </Col>
+                  </Row>
+                </Card>
+              )}
+            </Col>
+
+            {/* Flow Visualization Section - always full width */}
+            <Col span={24}>
+              <Card 
+                title="Flowchart" 
+                className="flowchart-card"
+                extra={<DocumentGenerator flow={selectedFlow} flowDetails={flowDetails} analysis={flowAnalysis} />}
+              >
+                <FlowVisualizer 
+                  flow={selectedFlow} 
+                  flowDetails={flowDetails} 
+                  flowAnalysis={flowAnalysis} 
+                />
               </Card>
             </Col>
           </Row>
@@ -344,7 +400,20 @@ const AppContent: React.FC = () => {
       );
     }
 
-    return null;
+    return (
+      <div style={{ textAlign: 'center', padding: '50px 0' }}>
+        <Result
+          status="info"
+          title="No Flow Details"
+          subTitle="Unable to load flow details. Try selecting a different flow."
+          extra={
+            <Button type="primary" onClick={handleBackToList}>
+              Return to Flow List
+            </Button>
+          }
+        />
+      </div>
+    );
   };
 
   return (

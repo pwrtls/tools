@@ -120,7 +120,14 @@ The Power Automate Flow Analyzer & Documenter is a PowerTools extension that hel
 
 ## Project Updates
 
-### Update 3 (Current)
+### Update 4 (Current)
+
+- Fixed pagination by implementing skiptoken-based navigation instead of skip/offset
+- Added robust caching mechanism for page tokens to improve multi-page navigation efficiency
+- Updated diagram generation to use only the enhanced renderer for better visualization
+- Removed redundant diagram generation code, simplifying the codebase and improving rendering consistency
+
+### Update 3 (Previous)
 
 - Implemented server-side search functionality to improve performance with large flow collections
 - Added debounced search to reduce API calls during typing

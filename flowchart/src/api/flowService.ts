@@ -7,6 +7,10 @@ import { getFlowStatus } from '../utils/flowStatus';
 // Set to false for production. Only enable for local testing without PowerTools.
 const USE_MOCK_DATA = false;
 
+// Cache to store page skipTokens for efficient pagination
+// Structure: { [searchText_pageSize]: { [pageNumber]: skipToken } }
+const skipTokenCache: Record<string, Record<number, string>> = {};
+
 // Define Dataverse response interfaces
 interface DataverseResponse<T> {
   value: T[];
@@ -132,7 +136,7 @@ export function useFlowService() {
       const url = '/api/data/v9.2/workflows';
       
       // Create URL parameters in the proper format expected by Dataverse API
-      const params = new URLSearchParams();
+      let params = new URLSearchParams();
       params.append('$select', 'workflowid,name,statecode,statuscode,category,clientdata,description,ismanaged,type,modifiedon,createdon,_createdby_value,_modifiedby_value,_ownerid_value');
       
       // Base filter for Power Automate Cloud Flows
@@ -156,14 +160,191 @@ export function useFlowService() {
       params.append('$count', 'true'); // Request total count
       params.append('$top', pageSize.toString()); // Limit results
       
-      // Calculate skip value for pagination
-      if (pageNumber > 1) {
-        const skipValue = (pageNumber - 1) * pageSize;
-        params.append('$skip', skipValue.toString());
-      }
-      
       // Add ordering to ensure consistent results across pages
       params.append('$orderby', 'modifiedon desc');
+      
+      // Generate a cache key based on searchText and pageSize
+      const cacheKey = `${searchText || ''}_${pageSize}`;
+      
+      // For subsequent pages, check if we have a cached skiptoken
+      if (pageNumber > 1) {
+        // Check if we have a cached skiptoken for this page
+        if (skipTokenCache[cacheKey] && skipTokenCache[cacheKey][pageNumber]) {
+          console.log(`Using cached skiptoken for page ${pageNumber}`);
+          params.append('$skiptoken', skipTokenCache[cacheKey][pageNumber]);
+        }
+        // Check if we have a cached skiptoken for the previous page
+        else if (skipTokenCache[cacheKey] && skipTokenCache[cacheKey][pageNumber - 1]) {
+          console.log(`Using cached skiptoken for previous page ${pageNumber - 1} and requesting next page`);
+          
+          // Use the previous page's skiptoken
+          let prevParams = new URLSearchParams();
+          prevParams.append('$select', params.get('$select') || '');
+          prevParams.append('$filter', params.get('$filter') || '');
+          prevParams.append('$top', params.get('$top') || '');
+          prevParams.append('$count', 'true');
+          prevParams.append('$orderby', params.get('$orderby') || '');
+          prevParams.append('$skiptoken', skipTokenCache[cacheKey][pageNumber - 1]);
+          
+          // Make request to get the next page's skiptoken
+          const intermediateResponse = await getAsJson<PowerToolsApiResponse>(url, prevParams);
+          
+          // Parse the response to get the nextLink
+          let jsonData: DataverseResponse<DataverseWorkflow>;
+          
+          if (intermediateResponse && typeof intermediateResponse.content === 'string') {
+            jsonData = JSON.parse(intermediateResponse.content);
+          } else if (intermediateResponse && typeof intermediateResponse.asJson === 'function') {
+            jsonData = await intermediateResponse.asJson();
+          } else {
+            jsonData = intermediateResponse as unknown as DataverseResponse<DataverseWorkflow>;
+          }
+          
+          // Check if there's a next page
+          const nextPageLink = jsonData["@odata.nextLink"] || null;
+          
+          if (!nextPageLink) {
+            console.warn(`No more pages available after page ${pageNumber - 1}, cannot retrieve page ${pageNumber}`);
+            // Return the last page's results with hasNextPage = false
+            const flows = jsonData.value.map((flow: DataverseWorkflow) => {
+              const flowStatus = getFlowStatus(flow.statecode ?? 0);
+              return {
+                id: flow.workflowid,
+                name: flow.name,
+                description: flow.description || '',
+                category: flow.category || 0,
+                createdOn: new Date(flow.createdon || Date.now()),
+                modifiedOn: new Date(flow.modifiedon || Date.now()),
+                status: flowStatus,
+                type: flow.type || 0,
+                createdBy: flow._createdby_value || '',
+                modifiedBy: flow._modifiedby_value || '',
+                owner: flow._ownerid_value || '',
+                state: flow.statecode ?? 0,
+                clientData: flow.clientdata,
+                isManaged: flow.ismanaged,
+                selected: false
+              };
+            });
+            
+            return {
+              flows,
+              totalCount: jsonData["@odata.count"] || 0,
+              hasNextPage: false
+            };
+          }
+          
+          // Extract skiptoken from the nextLink for the requested page
+          const skipTokenMatch = nextPageLink.match(/\$skiptoken=([^&]+)/);
+          
+          if (skipTokenMatch && skipTokenMatch[1]) {
+            const newSkipToken = decodeURIComponent(skipTokenMatch[1]);
+            
+            // Store the skiptoken in the cache
+            if (!skipTokenCache[cacheKey]) {
+              skipTokenCache[cacheKey] = {};
+            }
+            skipTokenCache[cacheKey][pageNumber] = newSkipToken;
+            
+            // Update the params for the current request
+            params.append('$skiptoken', newSkipToken);
+            console.log(`Found and cached skiptoken for page ${pageNumber}: ${newSkipToken.substring(0, 20)}...`);
+          } else {
+            // If we can't find a skiptoken, use the full nextLink URL
+            const urlParts = nextPageLink.split('?');
+            if (urlParts.length > 1) {
+              params = new URLSearchParams(urlParts[1]);
+              console.log('Using full nextLink parameters for pagination');
+            } else {
+              console.error('Unable to extract pagination parameters from nextLink:', nextPageLink);
+              throw new Error('Failed to navigate to the requested page: invalid pagination link');
+            }
+          }
+        }
+        // We don't have any cached skiptokens for this query, we need to build the chain
+        else {
+          console.log('No cached skiptokens - need to build pagination chain');
+          
+          // For pagination beyond page 1, we need to retrieve each previous page to get the skiptoken
+          // This is because Dataverse uses continuation tokens instead of skip/offset pagination
+          let currentPage = 1;
+          let currentParams = new URLSearchParams(params);
+          
+          // Initialize the cache for this query
+          if (!skipTokenCache[cacheKey]) {
+            skipTokenCache[cacheKey] = {};
+          }
+          
+          // Loop through pages until we reach the requested page or run out of data
+          while (currentPage < pageNumber) {
+            console.log(`Retrieving page ${currentPage} to get skiptoken for page ${currentPage + 1}...`);
+            
+            // Make request for the current page
+            const intermediateResponse = await getAsJson<PowerToolsApiResponse>(url, currentParams);
+            
+            // Parse the response to get the nextLink
+            let jsonData: DataverseResponse<DataverseWorkflow>;
+            
+            if (intermediateResponse && typeof intermediateResponse.content === 'string') {
+              jsonData = JSON.parse(intermediateResponse.content);
+            } else if (intermediateResponse && typeof intermediateResponse.asJson === 'function') {
+              jsonData = await intermediateResponse.asJson();
+            } else {
+              jsonData = intermediateResponse as unknown as DataverseResponse<DataverseWorkflow>;
+            }
+            
+            // Check if there's a next page
+            const nextPageLink = jsonData["@odata.nextLink"] || null;
+            
+            if (!nextPageLink) {
+              console.warn(`No more pages available after page ${currentPage}, cannot retrieve page ${pageNumber}`);
+              // Return empty result or last available page
+              return {
+                flows: [],
+                totalCount: jsonData["@odata.count"] || 0,
+                hasNextPage: false
+              };
+            }
+            
+            // Extract skiptoken from the nextLink
+            const skipTokenMatch = nextPageLink.match(/\$skiptoken=([^&]+)/);
+            
+            if (skipTokenMatch && skipTokenMatch[1]) {
+              const newSkipToken = decodeURIComponent(skipTokenMatch[1]);
+              
+              // Store the skiptoken in the cache for the next page
+              skipTokenCache[cacheKey][currentPage + 1] = newSkipToken;
+              
+              // Replace the params with just the skiptoken for the next request
+              currentParams = new URLSearchParams();
+              currentParams.append('$select', params.get('$select') || '');
+              currentParams.append('$filter', params.get('$filter') || '');
+              currentParams.append('$top', params.get('$top') || '');
+              currentParams.append('$count', 'true');
+              currentParams.append('$orderby', params.get('$orderby') || '');
+              currentParams.append('$skiptoken', newSkipToken);
+              
+              console.log(`Found and cached skiptoken for page ${currentPage + 1}: ${newSkipToken.substring(0, 20)}...`);
+            } else {
+              // If we can't find a skiptoken, use the full nextLink URL
+              const urlParts = nextPageLink.split('?');
+              if (urlParts.length > 1) {
+                currentParams = new URLSearchParams(urlParts[1]);
+                console.log('Using full nextLink parameters for pagination');
+              } else {
+                console.error('Unable to extract pagination parameters from nextLink:', nextPageLink);
+                throw new Error('Failed to navigate to the requested page: invalid pagination link');
+              }
+            }
+            
+            currentPage++;
+          }
+          
+          // Now currentParams contains the skiptoken or parameters needed for the requested page
+          params = currentParams;
+          console.log(`Successfully navigated to parameters for page ${pageNumber}`);
+        }
+      }
       
       console.log('Starting API request to get flows...');
       console.log('Request URL:', url);
@@ -241,6 +422,23 @@ export function useFlowService() {
           selected: false
         };
       });
+      
+      // Cache the skiptoken for the next page if available
+      if (jsonData["@odata.nextLink"]) {
+        const nextPageLink = jsonData["@odata.nextLink"];
+        const skipTokenMatch = nextPageLink.match(/\$skiptoken=([^&]+)/);
+        
+        if (skipTokenMatch && skipTokenMatch[1]) {
+          const newSkipToken = decodeURIComponent(skipTokenMatch[1]);
+          
+          // Store the skiptoken in the cache for the next page
+          if (!skipTokenCache[cacheKey]) {
+            skipTokenCache[cacheKey] = {};
+          }
+          skipTokenCache[cacheKey][pageNumber + 1] = newSkipToken;
+          console.log(`Cached skiptoken for next page (${pageNumber + 1})`);
+        }
+      }
       
       return {
         flows,
