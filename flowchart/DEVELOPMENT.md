@@ -9,6 +9,8 @@ The Flow Analyzer is built as a React application intended to run within the Pow
 ### Key Components
 
 1. **FlowList**: Displays a list of available flows in the current environment
+   - Provides server-side search functionality filtering flows by name and description
+   - Supports filtering and selection for batch operations
 2. **FlowVisualizer**: Renders a visual representation of the flow using Mermaid.js
 3. **FlowAnalyzer**: Analyzes flow structure, detects issues, and generates recommendations
 4. **DocumentGenerator**: Creates documentation in various formats (Markdown, PDF, Text)
@@ -51,6 +53,8 @@ During development, you can toggle the `USE_MOCK_DATA` flag in `src/api/flowServ
 The Flow Analyzer uses the Microsoft Dataverse Web API to interact with Power Automate flows. Key endpoints include:
 
 - `/api/data/v9.2/workflows` - List available flows
+  - Supports OData filtering with `$filter` parameter for server-side search
+  - Example: `/api/data/v9.2/workflows?$filter=category eq 5 and contains(name,'searchterm')`
 - `/api/data/v9.2/workflows({id})` - Get details for a specific flow
 
 The API integration is handled through the PowerTools API interface, which provides an authenticated connection to the Dataverse API.

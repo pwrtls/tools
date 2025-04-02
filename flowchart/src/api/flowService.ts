@@ -10,6 +10,8 @@ const USE_MOCK_DATA = false;
 // Define Dataverse response interfaces
 interface DataverseResponse<T> {
   value: T[];
+  "@odata.nextLink"?: string;
+  "@odata.count"?: number;
   error?: {
     code?: string;
     message?: string;
@@ -51,14 +53,28 @@ interface DataverseWorkflow {
 //   outputs?: any;
 // }
 
+// Response type for paginated results
+export interface PaginatedFlowsResponse {
+  flows: Flow[];
+  totalCount?: number;
+  hasNextPage: boolean;
+}
+
 export function useFlowService() {
   const { getAsJson, isLoaded, download } = usePowerToolsApi();
 
   /**
    * Get a list of flows from the PowerPlatform
+   * @param searchText Optional search text to filter flows on the server side
+   * @param pageSize Number of flows to retrieve per page (default: 50)
+   * @param pageNumber Page number to retrieve (default: 1)
    */
-  const getFlows = useCallback(async (): Promise<Flow[]> => {
-    console.log('Getting flows...');
+  const getFlows = useCallback(async (
+    searchText?: string, 
+    pageSize: number = 50, 
+    pageNumber: number = 1
+  ): Promise<PaginatedFlowsResponse> => {
+    console.log(`Getting flows...${searchText ? ` with search: "${searchText}"` : ''}, page ${pageNumber}, size ${pageSize}`);
     try {
       // Check if the PowerTools API is available and initialized
       if (!isLoaded) {
@@ -69,7 +85,7 @@ export function useFlowService() {
       // For testing/development without PowerTools connection
       if (USE_MOCK_DATA) {
         console.log('Using mock data for flows');
-        return mockFlowsResponse.value.map((flow: any) => {
+        let mockFlows = mockFlowsResponse.value.map((flow: any) => {
           const flowStatus = getFlowStatus(flow.statecode);
           return {
             id: flow.workflowid,
@@ -89,6 +105,26 @@ export function useFlowService() {
             selected: false
           };
         });
+        
+        // If search text is provided, filter mock data
+        if (searchText && searchText.trim()) {
+          const searchTerms = searchText.toLowerCase().trim();
+          mockFlows = mockFlows.filter(flow => 
+            flow.name.toLowerCase().includes(searchTerms) || 
+            (flow.description && flow.description.toLowerCase().includes(searchTerms))
+          );
+        }
+        
+        // Apply pagination to mock data
+        const totalCount = mockFlows.length;
+        const skip = (pageNumber - 1) * pageSize;
+        mockFlows = mockFlows.slice(skip, skip + pageSize);
+        
+        return {
+          flows: mockFlows,
+          totalCount,
+          hasNextPage: skip + pageSize < totalCount
+        };
       }
       
       // In Dataverse Web API, query parameters must be passed directly in the URL
@@ -98,7 +134,36 @@ export function useFlowService() {
       // Create URL parameters in the proper format expected by Dataverse API
       const params = new URLSearchParams();
       params.append('$select', 'workflowid,name,statecode,statuscode,category,clientdata,description,ismanaged,type,modifiedon,createdon,_createdby_value,_modifiedby_value,_ownerid_value');
-      params.append('$filter', 'category eq 5 and (statecode eq 0 or statecode eq 1)');
+      
+      // Base filter for Power Automate Cloud Flows
+      let filterQuery = 'category eq 5 and (statecode eq 0 or statecode eq 1)';
+      
+      // Add search filter if provided
+      if (searchText && searchText.trim()) {
+        // Clean and prepare the search text for OData filter
+        const cleanSearchText = searchText.trim().replace(/'/g, "''");
+        
+        // Create filter conditions for searchable fields
+        const searchFilter = `(contains(name,'${cleanSearchText}') or contains(description,'${cleanSearchText}'))`;
+        
+        // Combine with base filter
+        filterQuery = `${filterQuery} and ${searchFilter}`;
+      }
+      
+      params.append('$filter', filterQuery);
+      
+      // Add pagination parameters
+      params.append('$count', 'true'); // Request total count
+      params.append('$top', pageSize.toString()); // Limit results
+      
+      // Calculate skip value for pagination
+      if (pageNumber > 1) {
+        const skipValue = (pageNumber - 1) * pageSize;
+        params.append('$skip', skipValue.toString());
+      }
+      
+      // Add ordering to ensure consistent results across pages
+      params.append('$orderby', 'modifiedon desc');
       
       console.log('Starting API request to get flows...');
       console.log('Request URL:', url);
@@ -155,7 +220,7 @@ export function useFlowService() {
       console.log(`Successfully received ${jsonData.value.length} flows, first flow fields:`, 
         jsonData.value.length > 0 ? Object.keys(jsonData.value[0]) : 'No flows found');
         
-      return jsonData.value.map((flow: DataverseWorkflow) => {
+      const flows = jsonData.value.map((flow: DataverseWorkflow) => {
         const flowStatus = getFlowStatus(flow.statecode ?? 0);
         return {
           id: flow.workflowid,
@@ -176,6 +241,12 @@ export function useFlowService() {
           selected: false
         };
       });
+      
+      return {
+        flows,
+        totalCount: jsonData["@odata.count"],
+        hasNextPage: !!jsonData["@odata.nextLink"]
+      };
     } catch (error) {
       console.error('Error getting flows:', error);
       // Provide detailed error information to the user

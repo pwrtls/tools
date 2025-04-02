@@ -26,6 +26,7 @@ The Power Automate Flow Analyzer & Documenter is a PowerTools extension that hel
 | Feature | Description | Status |
 |---------|-------------|--------|
 | Flow List | Display all flows in the current environment with filtering and sorting | Completed |
+| Server-side Search | Filter flows directly from the API based on search terms | Completed |
 | Flow Details | Show detailed information about a selected flow | Completed |
 | Flow Visualization | Generate a visual diagram of the flow structure | In Progress |
 | Basic Analysis | Identify connectors and dependencies | In Progress |
@@ -62,6 +63,9 @@ The Power Automate Flow Analyzer & Documenter is a PowerTools extension that hel
 ### Frontend Components
 
 - **FlowList**: React component to display and filter flows
+  - Performs server-side searching via Dataverse API
+  - Provides visual indicators for flow status and selection
+  - Handles batch selection for documentation generation
 - **FlowVisualizer**: React component using Mermaid.js for flow visualization
 - **FlowAnalyzer**: Service to analyze flows and detect issues
 - **DocumentGenerator**: Service to generate documentation
@@ -116,7 +120,19 @@ The Power Automate Flow Analyzer & Documenter is a PowerTools extension that hel
 
 ## Project Updates
 
-### Update 1 (Current)
+### Update 3 (Current)
+
+- Implemented server-side search functionality to improve performance with large flow collections
+- Added debounced search to reduce API calls during typing
+- Updated documentation with Dataverse API search pattern details
+
+### Update 2 (Previous)
+
+- Enhanced search functionality implemented to search flows across multiple properties
+- Improved UI with tooltips and search tips for better user experience
+- Updated documentation to reflect new search capabilities
+
+### Update 1 (Previous)
 
 - Completed Flow List component
 - Completed Flow Details view

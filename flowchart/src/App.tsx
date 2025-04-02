@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Layout, Row, Col, Card, Spin, Alert, Result, Input, Button, Checkbox, message } from 'antd';
 import { ArrowLeftOutlined, SearchOutlined, FileTextOutlined } from '@ant-design/icons';
 import { FlowList } from './components/FlowList';
@@ -6,11 +6,16 @@ import { FlowVisualizer } from './components/FlowVisualizer';
 import { DocumentGenerator } from './components/DocumentGenerator';
 import { Flow, FlowDetails, FlowAnalysisResult } from './models/Flow';
 import { PowerToolsContextProvider } from './powertools/context';
-import { useFlowService } from './api/flowService';
+import { useFlowService, PaginatedFlowsResponse } from './api/flowService';
 import './App.css';
 
 const { Header, Content } = Layout;
 const { Search } = Input;
+
+// Debounce timeout in milliseconds
+const SEARCH_DEBOUNCE_DELAY = 500;
+// Default page size
+const DEFAULT_PAGE_SIZE = 50;
 
 const AppContent: React.FC = () => {
   const [selectedFlow, setSelectedFlow] = useState<Flow | null>(null);
@@ -24,6 +29,13 @@ const AppContent: React.FC = () => {
   const [filteredFlows, setFilteredFlows] = useState<Flow[]>([]);
   const [selectedFlows, setSelectedFlows] = useState<string[]>([]);
   const [flowsLoading, setFlowsLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const [totalFlows, setTotalFlows] = useState<number | undefined>(undefined);
+  const [hasNextPage, setHasNextPage] = useState(false);
+  
+  // Debounce search timer reference
+  const searchTimerRef = useRef<NodeJS.Timeout | null>(null);
   
   const { 
     isLoaded, 
@@ -33,41 +45,41 @@ const AppContent: React.FC = () => {
     testApiConnection 
   } = useFlowService();
 
-  // Load flows on component mount
+  // Load flows on component mount or when pagination/search changes
   useEffect(() => {
     let isMounted = true;
     
-    // Add a ref to track if we've already loaded the flows to prevent duplicate requests
-    if (flowsLoading && flows.length === 0) {
+    if (flowsLoading) {
       const loadFlows = async () => {
         try {
           setError(null); // Clear any existing errors
-          console.log('Loading flows...');
-          const data = await getFlows();
+          console.log(`Loading flows, page ${currentPage}, size ${pageSize}...`);
+          
+          // Load flows with current search and pagination
+          const response = await getFlows(searchText, pageSize, currentPage);
           
           // Only update state if component is still mounted
           if (isMounted) {
-            console.log(`Successfully loaded ${data.length} flows`);
-            setFlows(data);
-            setFilteredFlows(data);
+            console.log(`Successfully loaded ${response.flows.length} flows`);
+            setFlows(response.flows);
+            setFilteredFlows(response.flows);
+            setTotalFlows(response.totalCount);
+            setHasNextPage(response.hasNextPage);
           }
         } catch (err: any) {
           console.error('Error loading flows:', err);
-          // Add an error state to show to the user
           if (isMounted) {
             const errorMessage = err.message || 'Failed to load flows. Please check your connection and permissions.';
             console.error('Setting error message:', errorMessage);
             setError(errorMessage);
           }
         } finally {
-          // Only update state if component is still mounted
           if (isMounted) {
             setFlowsLoading(false);
           }
         }
       };
 
-      // Execute immediately when component mounts
       loadFlows();
     }
     
@@ -75,7 +87,7 @@ const AppContent: React.FC = () => {
     return () => {
       isMounted = false;
     };
-  }, [getFlows, flows.length, flowsLoading]);
+  }, [getFlows, currentPage, pageSize, flowsLoading, searchText]);
 
   const handleFlowSelect = (flow: Flow) => {
     setSelectedFlow(flow);
@@ -89,29 +101,45 @@ const AppContent: React.FC = () => {
     setIsAnalysisView(false);
   };
 
-  // Handle search functionality
-  const handleSearch = (value: string) => {
+  // Handle search functionality with debounce
+  const handleSearchInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
     setSearchText(value);
-    if (!value.trim()) {
-      setFilteredFlows(flows);
-      return;
+    
+    // Clear any existing timer
+    if (searchTimerRef.current) {
+      clearTimeout(searchTimerRef.current);
     }
     
-    const searchTerms = value.toLowerCase().split(' ').filter(term => term);
-    const results = flows.filter(flow => {
-      const nameMatch = flow.name.toLowerCase().includes(value.toLowerCase());
-      const descMatch = flow.description?.toLowerCase().includes(value.toLowerCase());
-      
-      // Check if all search terms are found in either name or description
-      const termsMatch = searchTerms.every(term => 
-        flow.name.toLowerCase().includes(term) || 
-        (flow.description && flow.description.toLowerCase().includes(term))
-      );
-      
-      return nameMatch || descMatch || termsMatch;
-    });
+    // Set a new timer to delay the search execution
+    searchTimerRef.current = setTimeout(() => {
+      // Reset to first page when searching
+      setCurrentPage(1);
+      setFlowsLoading(true);
+    }, SEARCH_DEBOUNCE_DELAY);
+  };
+  
+  // Handle search button click or Enter key
+  const handleSearch = (value: string) => {
+    // Clear any existing debounced search
+    if (searchTimerRef.current) {
+      clearTimeout(searchTimerRef.current);
+    }
     
-    setFilteredFlows(results);
+    // Set search text and reset pagination
+    setSearchText(value);
+    setCurrentPage(1);
+    setFlowsLoading(true);
+  };
+
+  // Handle page change
+  const handlePageChange = (page: number, size?: number) => {
+    console.log(`Changing to page ${page}, size ${size}`);
+    setCurrentPage(page);
+    if (size && size !== pageSize) {
+      setPageSize(size);
+    }
+    setFlowsLoading(true);
   };
 
   // Handle select all checkbox
@@ -352,12 +380,12 @@ const AppContent: React.FC = () => {
               </Button>
             </div>
             <Search
-              placeholder="Search flows by name or description"
+              placeholder="Search by name, status, owner, dates, etc."
               allowClear
               enterButton={<SearchOutlined />}
               size="middle"
               value={searchText}
-              onChange={(e) => handleSearch(e.target.value)}
+              onChange={handleSearchInputChange}
               style={{ width: 400 }}
             />
           </>
@@ -411,6 +439,10 @@ const AppContent: React.FC = () => {
                 selectedFlows={selectedFlows}
                 onSelectFlow={handleFlowSelection}
                 loading={flowsLoading}
+                currentPage={currentPage}
+                pageSize={pageSize}
+                totalCount={totalFlows}
+                onPageChange={handlePageChange}
               />
             )}
           </>
