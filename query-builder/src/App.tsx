@@ -1,16 +1,25 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Layout, Input, Select, InputNumber, Checkbox, Button, Table, Space } from 'antd';
 import { DownloadOutlined } from '@ant-design/icons';
 import { PowerToolsContextProvider } from './powertools/context';
 import { usePowerToolsApi } from './powertools/apiHook';
+import { QueryIntellisense } from './components/QueryIntellisense';
+import { MetadataService } from './services/metadataService';
 
 const { Content } = Layout;
-const { TextArea } = Input;
 
 type QueryType = 'SQL' | 'OData' | 'FetchXML';
 
 const AppContent: React.FC = () => {
   const api = usePowerToolsApi();
+  
+  // Create metadata service instance
+  const metadataService = useMemo(() => {
+    const service = api.getAsJson ? new MetadataService(api.getAsJson) : null;
+    console.log('App: MetadataService created:', !!service, 'API available:', !!api.getAsJson);
+    return service;
+  }, [api.getAsJson]);
+  
   const [query, setQuery] = useState('');
   const [queryType, setQueryType] = useState<QueryType>('SQL');
   const [top, setTop] = useState<number | null>(null);
@@ -18,32 +27,68 @@ const AppContent: React.FC = () => {
   const [data, setData] = useState<any[]>([]);
   const [columns, setColumns] = useState<any[]>([]);
 
-  function convertSqlToOData(sql: string): string {
+  function convertSqlToOData(sql: string): { endpoint: string; error?: string } {
     // Basic SQL to OData conversion
-    const lowerSql = sql.toLowerCase();
+    const lowerSql = sql.toLowerCase().trim();
     
-    // Handle SELECT * FROM table
-    if (lowerSql.includes('select * from')) {
-      const tableName = lowerSql.split('from')[1].trim();
-      return tableName;
-    }
-    
-    // Handle SELECT field1, field2 FROM table
-    if (lowerSql.includes('select') && lowerSql.includes('from')) {
-      const [selectPart, fromPart] = lowerSql.split('from');
-      const fields = selectPart.replace('select', '').trim();
-      const tableName = fromPart.trim();
-      
-      if (fields === '*') {
-        return tableName;
+    try {
+      // Handle SELECT * FROM table
+      if (lowerSql.includes('select * from')) {
+        const tableName = lowerSql.split('from')[1].trim().split(/\s+/)[0]; // Get first word after FROM
+        console.log('Extracted table name from SQL:', tableName);
+        
+        // Try to find the entity in metadata
+        if (metadataService) {
+          const entity = metadataService.getEntityByName(tableName);
+          if (entity && entity.EntitySetName) {
+            console.log('Found entity:', entity.LogicalName, 'with EntitySetName:', entity.EntitySetName);
+            return { endpoint: entity.EntitySetName };
+          } else if (entity) {
+            console.warn('Entity found but no EntitySetName, using LogicalName + "s":', entity.LogicalName);
+            return { endpoint: entity.LogicalName + 's' }; // Fallback
+          } else {
+            console.warn('Entity not found in metadata, trying direct name:', tableName);
+            return { endpoint: tableName, error: `Entity '${tableName}' not found in metadata. Available entities will be logged.` };
+          }
+        } else {
+          return { endpoint: tableName + 's', error: 'Metadata service not available, using best guess' };
+        }
       }
       
-      return `${tableName}?$select=${fields}`;
+      // Handle SELECT field1, field2 FROM table
+      if (lowerSql.includes('select') && lowerSql.includes('from')) {
+        const [selectPart, fromPart] = lowerSql.split('from');
+        let fields = selectPart.replace('select', '').trim();
+        const tableName = fromPart.trim().split(/\s+/)[0]; // Get first word after FROM
+        
+        // Try to find the entity in metadata
+        let entitySetName = tableName;
+        if (metadataService) {
+          const entity = metadataService.getEntityByName(tableName);
+          if (entity && entity.EntitySetName) {
+            entitySetName = entity.EntitySetName;
+          } else if (entity) {
+            entitySetName = entity.LogicalName + 's'; // Fallback
+          }
+        }
+        
+        if (fields === '*') {
+          return { endpoint: entitySetName };
+        }
+        
+        // Clean up field names
+        fields = fields.split(',').map(f => f.trim()).join(',');
+        return { endpoint: `${entitySetName}?$select=${fields}` };
+      }
+      
+      // If no conversion pattern matches, return the original query
+      console.warn('No SQL to OData conversion pattern matched, using original query');
+      return { endpoint: sql, error: 'Could not parse SQL query' };
+      
+    } catch (error) {
+      console.error('Error converting SQL to OData:', error);
+      return { endpoint: sql, error: `Conversion error: ${error}` };
     }
-    
-    // If no conversion pattern matches, return the original query
-    console.warn('No SQL to OData conversion pattern matched, using original query');
-    return sql;
   }
 
   async function executeQuery() {
@@ -51,9 +96,21 @@ const AppContent: React.FC = () => {
     try {
       let result: any;
       if (queryType === 'SQL') {
-        const odata = convertSqlToOData(query);
-        console.log('Converted OData query:', odata);
-        result = await api.getAsJson<any>(`/api/data/v9.0/${odata}`);
+        const conversion = convertSqlToOData(query);
+        console.log('Converted OData query:', conversion.endpoint);
+        if (conversion.error) {
+          console.warn('Conversion warning:', conversion.error);
+          
+          // Log available entities to help debugging
+          if (metadataService) {
+            const entities = metadataService.searchEntities('').slice(0, 20);
+            console.log('Available entities (first 20):', entities.map(e => ({
+              LogicalName: e.LogicalName,
+              EntitySetName: e.EntitySetName
+            })));
+          }
+        }
+        result = await api.getAsJson<any>(`/api/data/v9.0/${conversion.endpoint}`);
         console.log('API Response:', result);
       } else if (queryType === 'OData') {
         result = await api.getAsJson<any>(`/api/data/v9.0/${query}`);
@@ -65,8 +122,27 @@ const AppContent: React.FC = () => {
         console.log('API Response:', result);
       }
 
-      console.log('Result value:', result?.value);
-      const value = result?.value ?? [];
+      // Handle PowerTools API response format
+      let data: any;
+      if (result && typeof result.content === 'string') {
+        // PowerTools API returns response with content as JSON string
+        const parsedContent = JSON.parse(result.content);
+        
+        // Check if the parsed content is an error
+        if (parsedContent.error) {
+          console.error('API Error Response:', parsedContent.error);
+          alert(`API Error: ${parsedContent.error.message} (${parsedContent.error.code})`);
+          return;
+        }
+        
+        data = parsedContent;
+      } else {
+        // Direct JSON response
+        data = result;
+      }
+
+      console.log('Parsed data:', data);
+      const value = data?.value ?? [];
       console.log('Setting data to:', value);
       setData(value);
       if (value.length > 0) {
@@ -79,6 +155,7 @@ const AppContent: React.FC = () => {
       }
     } catch (e) {
       console.error('Error executing query', e);
+      alert(`Query execution failed: ${e}`);
     }
   }
 
@@ -103,7 +180,22 @@ const AppContent: React.FC = () => {
   return (
     <Content style={{ padding: 24 }}>
       <Space direction="vertical" style={{ width: '100%' }}>
-        <TextArea rows={4} value={query} onChange={e => setQuery(e.target.value)} placeholder="Enter query" />
+        {metadataService ? (
+          <QueryIntellisense
+            value={query}
+            onChange={setQuery}
+            metadataService={metadataService}
+            placeholder="Enter query"
+            rows={4}
+          />
+        ) : (
+          <Input.TextArea
+            rows={4}
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="Enter query"
+          />
+        )}
         <Space wrap>
           <Select<QueryType> value={queryType} onChange={setQueryType} style={{ width: 120 }}>
             <Select.Option value="SQL">SQL</Select.Option>
