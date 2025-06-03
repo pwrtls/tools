@@ -17,9 +17,9 @@ export function usePowerToolsApi() {
         }
     };
 
-    const getAsJson = async <T,>(url: string, params?: URLSearchParams, headers?: Record<string, string>): Promise<T> => {
+    const getAsJson = async <T extends unknown>(url: string, params?: URLSearchParams, headers?: Record<string, string>): Promise<T> => {
         const res = await wrappedGet(url, params, headers);
-        return await res.asJson<T>();
+        return res.json() as Promise<T>;
     };
 
     const wrappedDownload = async (content: string, fileName?: string, mimeType?: string) => {

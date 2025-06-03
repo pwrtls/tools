@@ -1,12 +1,20 @@
 import React from 'react';
 import { Result } from 'antd';
 
+type PowerToolsAPI = {
+    get: (url: string, params?: URLSearchParams, headers?: Record<string, string>) => Promise<any>;
+    post: (url: string, data: any) => Promise<any>;
+    download: (content: string, fileName?: string, mimeType?: string) => Promise<void>;
+    onLoad: () => Promise<void>;
+    addConnectionChangeListener: (callback: (name: string | undefined) => void) => void;
+};
+
 type PowerToolsContextType = {
     isLoaded: boolean;
     connectionName: string;
-    get?: typeof window.PowerTools.get;
-    post?: typeof window.PowerTools.post;
-    download?: typeof window.PowerTools.download;
+    get?: PowerToolsAPI['get'];
+    post?: PowerToolsAPI['post'];
+    download?: PowerToolsAPI['download'];
 };
 
 export const PowerToolsContext = React.createContext<PowerToolsContextType>({

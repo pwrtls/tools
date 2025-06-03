@@ -84,7 +84,17 @@ const AppContent: React.FC = () => {
           <Button type="primary" onClick={executeQuery}>Submit</Button>
           <Button icon={<DownloadOutlined />} onClick={exportCsv}>Export CSV</Button>
         </Space>
-        <Table dataSource={data} columns={columns} rowKey={(record, index) => index} pagination={pagination} />
+        <Table 
+          dataSource={data} 
+          columns={columns} 
+          rowKey={(record) => {
+            // Try to use a unique identifier from the record, fallback to a generated key
+            const keys = Object.keys(record);
+            const idKey = keys.find(k => k.toLowerCase().includes('id'));
+            return idKey ? record[idKey] : Math.random().toString(36).substr(2, 9);
+          }}
+          pagination={pagination} 
+        />
       </Space>
     </Content>
   );
