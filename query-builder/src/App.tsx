@@ -19,7 +19,30 @@ const AppContent: React.FC = () => {
   const [columns, setColumns] = useState<any[]>([]);
 
   function convertSqlToOData(sql: string): string {
-    // TODO: Implement real SQL to OData conversion
+    // Basic SQL to OData conversion
+    const lowerSql = sql.toLowerCase();
+    
+    // Handle SELECT * FROM table
+    if (lowerSql.includes('select * from')) {
+      const tableName = lowerSql.split('from')[1].trim();
+      return tableName;
+    }
+    
+    // Handle SELECT field1, field2 FROM table
+    if (lowerSql.includes('select') && lowerSql.includes('from')) {
+      const [selectPart, fromPart] = lowerSql.split('from');
+      const fields = selectPart.replace('select', '').trim();
+      const tableName = fromPart.trim();
+      
+      if (fields === '*') {
+        return tableName;
+      }
+      
+      return `${tableName}?$select=${fields}`;
+    }
+    
+    // If no conversion pattern matches, return the original query
+    console.warn('No SQL to OData conversion pattern matched, using original query');
     return sql;
   }
 
@@ -29,21 +52,29 @@ const AppContent: React.FC = () => {
       let result: any;
       if (queryType === 'SQL') {
         const odata = convertSqlToOData(query);
+        console.log('Converted OData query:', odata);
         result = await api.getAsJson<any>(`/api/data/v9.0/${odata}`);
+        console.log('API Response:', result);
       } else if (queryType === 'OData') {
         result = await api.getAsJson<any>(`/api/data/v9.0/${query}`);
+        console.log('API Response:', result);
       } else {
         const params = new URLSearchParams();
         params.set('fetchXml', query);
         result = await api.getAsJson<any>('/api/data/v9.0/', params);
+        console.log('API Response:', result);
       }
 
+      console.log('Result value:', result?.value);
       const value = result?.value ?? [];
+      console.log('Setting data to:', value);
       setData(value);
       if (value.length > 0) {
         const cols = Object.keys(value[0]).map(k => ({ title: k, dataIndex: k }));
+        console.log('Setting columns to:', cols);
         setColumns(cols);
       } else {
+        console.log('No data found, setting empty columns');
         setColumns([]);
       }
     } catch (e) {
