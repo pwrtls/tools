@@ -56,103 +56,134 @@ export const QueryIntellisense: React.FC<QueryIntellisenseProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [suggestionPosition, setSuggestionPosition] = useState({ top: 0, left: 0 });
   
-  const textAreaRef = useRef<HTMLTextAreaElement>(null);
+  // Use 'any' type to access Ant Design's internal textarea
+  const textAreaRef = useRef<any>(null);
   const suggestionListRef = useRef<HTMLDivElement>(null);
+  const selectedItemRef = useRef<HTMLDivElement>(null);
 
-  // Initialize metadata on component mount
+  // Check metadata loading status and show debug info
   useEffect(() => {
-    const initializeMetadata = async () => {
-      console.log('QueryIntellisense: Starting metadata initialization...');
-      setIsLoading(true);
-      try {
-        const metadata = await metadataService.getMetadata();
-        console.log('QueryIntellisense: Metadata loaded successfully:', metadata.length, 'entities');
-        
-        // Debug: Log first 10 entities to see what's available
-        console.log('QueryIntellisense: First 10 entities:', metadata.slice(0, 10).map(e => ({
-          LogicalName: e.LogicalName,
-          DisplayName: getDisplayName(e.DisplayName)
-        })));
-        
-        // Look for account-related entities specifically  
-        const accountEntities = metadata.filter(e => 
-          e.LogicalName.toLowerCase().includes('account')
-        );
-        console.log('QueryIntellisense: Account-related entities:', accountEntities.map(e => ({
-          LogicalName: e.LogicalName,
-          DisplayName: getDisplayName(e.DisplayName)
-        })));
-        
-      } catch (error) {
-        console.error('QueryIntellisense: Failed to load metadata:', error);
-      } finally {
-        setIsLoading(false);
-        console.log('QueryIntellisense: Metadata initialization complete');
-      }
-    };
-
-    // Only initialize if metadata service exists and metadata hasn't been loaded yet
-    if (metadataService && !metadataService.isLoading()) {
-      // Check if we already have cached metadata
-      try {
-        const cachedEntities = metadataService.searchEntities('');
-        if (cachedEntities.length === 0) {
-          // No cached metadata, need to fetch
-          initializeMetadata();
-        } else {
-          console.log('QueryIntellisense: Using cached metadata:', cachedEntities.length, 'entities');
+    if (metadataService) {
+      // Check if metadata is already loaded or loading
+      const checkMetadataStatus = async () => {
+        setIsLoading(true); // Assume loading initially
+        try {
+          const entities = metadataService.searchEntities('');
           
-          // Debug: Log first 10 entities to see what's available
-          console.log('QueryIntellisense: First 10 cached entities:', cachedEntities.slice(0, 10).map(e => ({
-            LogicalName: e.LogicalName,
-            DisplayName: getDisplayName(e.DisplayName)
-          })));
+          if (entities.length > 0) {
+            // We have entities - enable the interface immediately
+            console.log('QueryIntellisense: Metadata available:', entities.length, 'entities');
+            setIsLoading(false);
+            
+            // Debug: Log first 10 entities to see what's available
+            console.log('QueryIntellisense: First 10 entities:', entities.slice(0, 10).map(e => ({
+              LogicalName: e.LogicalName,
+              DisplayName: getDisplayName(e.DisplayName)
+            })));
+            
+            // Look for account-related entities specifically  
+            const accountEntities = entities.filter(e => 
+              e.LogicalName.toLowerCase().includes('account')
+            );
+            console.log('QueryIntellisense: Account-related entities:', accountEntities.map(e => ({
+              LogicalName: e.LogicalName,
+              DisplayName: getDisplayName(e.DisplayName)
+            })));
+            
+          } else {
+            // No entities yet - wait for background loading to complete
+            console.log('QueryIntellisense: No metadata available yet, waiting for background load...');
+            
+            const waitForMetadata = () => {
+              setTimeout(async () => {
+                const newEntities = metadataService.searchEntities('');
+                if (newEntities.length > 0) {
+                  console.log('QueryIntellisense: Metadata now available:', newEntities.length, 'entities');
+                  setIsLoading(false);
+                } else if (metadataService.isLoading()) {
+                  // Still actively loading, keep waiting
+                  waitForMetadata();
+                } else {
+                  // Not loading and no entities - assume it failed
+                  console.log('QueryIntellisense: Metadata loading appears to have failed or is empty');
+                  setIsLoading(false);
+                }
+              }, 500);
+            };
+            waitForMetadata();
+          }
+        } catch (error) {
+          console.error('QueryIntellisense: Error checking metadata status:', error);
+          setIsLoading(false);
         }
-      } catch {
-        // Error accessing cache, try to initialize
-        initializeMetadata();
-      }
+      };
+      
+      checkMetadataStatus();
+    } else {
+      // No metadata service yet - show loading
+      setIsLoading(true);
     }
   }, [metadataService]);
 
+  // Auto-scroll selected item into view
+  useEffect(() => {
+    if (selectedItemRef.current && suggestionListRef.current) {
+      selectedItemRef.current.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest'
+      });
+    }
+  }, [selectedIndex, showSuggestions]);
+
   // Calculate cursor position for suggestions
   const calculateSuggestionPosition = useCallback((textArea: HTMLTextAreaElement, position: number) => {
-    // Create a mirror div to calculate text position
-    const mirror = document.createElement('div');
-    const styles = window.getComputedStyle(textArea);
-    
-    // Copy styles to mirror
-    mirror.style.position = 'absolute';
-    mirror.style.visibility = 'hidden';
-    mirror.style.fontFamily = styles.fontFamily;
-    mirror.style.fontSize = styles.fontSize;
-    mirror.style.lineHeight = styles.lineHeight;
-    mirror.style.padding = styles.padding;
-    mirror.style.border = styles.border;
-    mirror.style.whiteSpace = 'pre-wrap';
-    mirror.style.wordWrap = 'break-word';
-    mirror.style.width = `${textArea.offsetWidth}px`;
-    
-    document.body.appendChild(mirror);
-    
-    // Get text up to cursor
-    const textBeforeCursor = value.substring(0, position);
-    mirror.textContent = textBeforeCursor;
-    
-    // Create a span for the cursor position
-    const cursorSpan = document.createElement('span');
-    cursorSpan.textContent = '|';
-    mirror.appendChild(cursorSpan);
-    
-    const rect = textArea.getBoundingClientRect();
-    const cursorRect = cursorSpan.getBoundingClientRect();
-    
-    document.body.removeChild(mirror);
-    
-    return {
-      top: rect.top + (cursorRect.top - mirror.getBoundingClientRect().top) + 20,
-      left: rect.left + (cursorRect.left - mirror.getBoundingClientRect().left)
-    };
+    // Safety check - ensure textArea is valid
+    if (!textArea || !textArea.isConnected) {
+      console.warn('QueryIntellisense: Invalid textArea passed to calculateSuggestionPosition');
+      return { top: 0, left: 0 };
+    }
+
+    try {
+      // Create a mirror div to calculate text position
+      const mirror = document.createElement('div');
+      const styles = window.getComputedStyle(textArea);
+      
+      // Copy styles to mirror
+      mirror.style.position = 'absolute';
+      mirror.style.visibility = 'hidden';
+      mirror.style.fontFamily = styles.fontFamily;
+      mirror.style.fontSize = styles.fontSize;
+      mirror.style.lineHeight = styles.lineHeight;
+      mirror.style.padding = styles.padding;
+      mirror.style.border = styles.border;
+      mirror.style.whiteSpace = 'pre-wrap';
+      mirror.style.wordWrap = 'break-word';
+      mirror.style.width = `${textArea.offsetWidth}px`;
+      
+      document.body.appendChild(mirror);
+      
+      // Get text up to cursor
+      const textBeforeCursor = value.substring(0, position);
+      mirror.textContent = textBeforeCursor;
+      
+      // Create a span for the cursor position
+      const cursorSpan = document.createElement('span');
+      cursorSpan.textContent = '|';
+      mirror.appendChild(cursorSpan);
+      
+      const rect = textArea.getBoundingClientRect();
+      const cursorRect = cursorSpan.getBoundingClientRect();
+      
+      document.body.removeChild(mirror);
+      
+      return {
+        top: rect.top + (cursorRect.top - mirror.getBoundingClientRect().top) + 20,
+        left: rect.left + (cursorRect.left - mirror.getBoundingClientRect().left)
+      };
+    } catch (error) {
+      console.error('QueryIntellisense: Error calculating suggestion position:', error);
+      return { top: 0, left: 0 };
+    }
   }, [value]);
 
   // Generate suggestions based on query context
@@ -174,21 +205,21 @@ export const QueryIntellisense: React.FC<QueryIntellisenseProps> = ({
 
       if (context.type === 'entity') {
         console.log('QueryIntellisense: Looking for entity suggestions with query:', context.currentWord);
-        // Suggest entity names
+        // Suggest entity logical names (users see familiar names like "account", "contact")
         const filteredEntities = metadataService.searchEntities(context.currentWord);
         console.log('QueryIntellisense: Found', filteredEntities.length, 'matching entities');
         filteredEntities.slice(0, 10).forEach(entity => {
           const displayName = getDisplayName(entity.DisplayName);
           newSuggestions.push({
             type: 'entity',
-            value: entity.LogicalName,
+            value: entity.LogicalName, // Use logical name for user-facing suggestions
             displayName: displayName,
             description: `Table: ${entity.LogicalName}`
           });
         });
       } else if (context.type === 'attribute' && context.entityName) {
         console.log('QueryIntellisense: Looking for attribute suggestions for entity:', context.entityName, 'with query:', context.currentWord);
-        // Suggest attribute names for the specified entity
+        // Use the entity name directly (it should be the logical name from user input)
         const attributes = metadataService.searchAttributes(context.entityName, context.currentWord);
         console.log('QueryIntellisense: Found', attributes.length, 'matching attributes');
         attributes.slice(0, 10).forEach(attribute => {
@@ -232,9 +263,12 @@ export const QueryIntellisense: React.FC<QueryIntellisenseProps> = ({
 
     // Calculate suggestion position
     if (newSuggestions.length > 0 && textAreaRef.current) {
-      const position = calculateSuggestionPosition(textAreaRef.current, newCursorPosition);
-      setSuggestionPosition(position);
-      console.log('QueryIntellisense: Suggestion position calculated:', position);
+      const nativeTextArea = textAreaRef.current?.resizableTextArea?.textArea;
+      if (nativeTextArea) {
+        const position = calculateSuggestionPosition(nativeTextArea, newCursorPosition);
+        setSuggestionPosition(position);
+        console.log('QueryIntellisense: Suggestion position calculated:', position);
+      }
     }
   }, [onChange, generateSuggestions, calculateSuggestionPosition]);
 
@@ -270,9 +304,10 @@ export const QueryIntellisense: React.FC<QueryIntellisenseProps> = ({
 
       // Set cursor position after state update
       setTimeout(() => {
-        if (textAreaRef.current) {
-          textAreaRef.current.setSelectionRange(newCursorPosition, newCursorPosition);
-          textAreaRef.current.focus();
+        const nativeTextArea = textAreaRef.current?.resizableTextArea?.textArea;
+        if (nativeTextArea) {
+          nativeTextArea.setSelectionRange(newCursorPosition, newCursorPosition);
+          nativeTextArea.focus();
         }
       }, 0);
     };
@@ -328,9 +363,10 @@ export const QueryIntellisense: React.FC<QueryIntellisenseProps> = ({
 
     // Set cursor position after state update
     setTimeout(() => {
-      if (textAreaRef.current) {
-        textAreaRef.current.setSelectionRange(newCursorPosition, newCursorPosition);
-        textAreaRef.current.focus();
+      const nativeTextArea = textAreaRef.current?.resizableTextArea?.textArea;
+      if (nativeTextArea) {
+        nativeTextArea.setSelectionRange(newCursorPosition, newCursorPosition);
+        nativeTextArea.focus();
       }
     }, 0);
   }, [value, cursorPosition, onChange]);
@@ -350,6 +386,7 @@ export const QueryIntellisense: React.FC<QueryIntellisenseProps> = ({
   const renderSuggestionItem = (suggestion: Suggestion, index: number) => (
     <List.Item
       key={`${suggestion.type}-${suggestion.value}`}
+      ref={index === selectedIndex ? selectedItemRef : null}
       onClick={() => handleSuggestionClick(suggestion)}
       style={{
         padding: '8px 12px',
@@ -390,18 +427,49 @@ export const QueryIntellisense: React.FC<QueryIntellisenseProps> = ({
         value={value}
         onChange={handleInputChange}
         onKeyDown={handleKeyDown}
-        placeholder={placeholder}
+        placeholder={isLoading ? "⏳ Loading entity metadata, please wait..." : placeholder}
         rows={rows}
-        style={{ fontFamily: 'monospace' }}
+        disabled={isLoading}
+        style={{ 
+          fontFamily: 'monospace',
+          backgroundColor: isLoading ? '#f5f5f5' : undefined,
+          cursor: isLoading ? 'not-allowed' : undefined
+        }}
       />
       
       {isLoading && (
-        <div style={{ position: 'absolute', top: '8px', right: '8px' }}>
+        <div style={{ 
+          position: 'absolute', 
+          top: '8px', 
+          right: '8px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px'
+        }}>
           <Spin size="small" />
+          <span style={{ fontSize: '12px', color: '#666' }}>Loading metadata...</span>
         </div>
       )}
 
-      {showSuggestions && suggestions.length > 0 && (
+      {/* Helper text */}
+      <div style={{ 
+        fontSize: '11px', 
+        color: isLoading ? '#999' : '#8c8c8c', 
+        marginTop: '4px',
+        display: 'flex',
+        justifyContent: 'space-between'
+      }}>
+        {isLoading ? (
+          <span>⏳ Loading entity metadata from Dataverse...</span>
+        ) : (
+          <span>💡 Type entity names after FROM, attributes after entity.</span>
+        )}
+        <span style={{ opacity: isLoading ? 0.5 : 1 }}>
+          ⌨️ Use ↑↓ arrows, Tab/Enter to select, Esc to close
+        </span>
+      </div>
+
+      {showSuggestions && suggestions.length > 0 && !isLoading && (
         <div
           ref={suggestionListRef}
           style={{

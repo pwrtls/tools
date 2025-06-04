@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { Layout, Input, Select, InputNumber, Checkbox, Button, Table, Space } from 'antd';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { Layout, Input, Select, InputNumber, Checkbox, Button, Table, Space, Spin } from 'antd';
 import { DownloadOutlined } from '@ant-design/icons';
 import { PowerToolsContextProvider } from './powertools/context';
 import { usePowerToolsApi } from './powertools/apiHook';
@@ -13,12 +13,31 @@ type QueryType = 'SQL' | 'OData' | 'FetchXML';
 const AppContent: React.FC = () => {
   const api = usePowerToolsApi();
   
-  // Create metadata service instance
-  const metadataService = useMemo(() => {
-    const service = api.getAsJson ? new MetadataService(api.getAsJson) : null;
-    console.log('App: MetadataService created:', !!service, 'API available:', !!api.getAsJson);
-    return service;
+  // Create metadata service instance - use a ref to maintain stable instance
+  const metadataServiceRef = useRef<MetadataService | null>(null);
+  const [metadataServiceReady, setMetadataServiceReady] = useState(false);
+  
+  // Initialize metadata service once when API becomes available
+  const initializeMetadataService = useCallback(() => {
+    if (api.getAsJson && !metadataServiceRef.current) {
+      metadataServiceRef.current = new MetadataService(api.getAsJson);
+      console.log('App: MetadataService created and stored in ref');
+      setMetadataServiceReady(true); // Trigger re-render
+      
+      // Start loading metadata immediately in the background
+      metadataServiceRef.current.getMetadata().then(() => {
+        console.log('App: Background metadata loading completed');
+      }).catch((error) => {
+        console.error('App: Background metadata loading failed:', error);
+      });
+    }
   }, [api.getAsJson]);
+  
+  useEffect(() => {
+    initializeMetadataService();
+  }, [initializeMetadataService]);
+  
+  const metadataService = metadataServiceRef.current;
   
   const [query, setQuery] = useState('');
   const [queryType, setQueryType] = useState<QueryType>('SQL');
@@ -39,15 +58,12 @@ const AppContent: React.FC = () => {
         
         // Try to find the entity in metadata
         if (metadataService) {
-          const entity = metadataService.getEntityByName(tableName);
-          if (entity && entity.EntitySetName) {
-            console.log('Found entity:', entity.LogicalName, 'with EntitySetName:', entity.EntitySetName);
-            return { endpoint: entity.EntitySetName };
-          } else if (entity) {
-            console.warn('Entity found but no EntitySetName, using LogicalName + "s":', entity.LogicalName);
-            return { endpoint: entity.LogicalName + 's' }; // Fallback
+          const collectionName = metadataService.getEntityCollectionName(tableName);
+          if (collectionName) {
+            console.log('Found entity:', tableName, 'with collection name:', collectionName);
+            return { endpoint: collectionName };
           } else {
-            console.warn('Entity not found in metadata, trying direct name:', tableName);
+            console.warn('Entity not found in metadata:', tableName);
             return { endpoint: tableName, error: `Entity '${tableName}' not found in metadata. Available entities will be logged.` };
           }
         } else {
@@ -64,11 +80,11 @@ const AppContent: React.FC = () => {
         // Try to find the entity in metadata
         let entitySetName = tableName;
         if (metadataService) {
-          const entity = metadataService.getEntityByName(tableName);
-          if (entity && entity.EntitySetName) {
-            entitySetName = entity.EntitySetName;
-          } else if (entity) {
-            entitySetName = entity.LogicalName + 's'; // Fallback
+          const collectionName = metadataService.getEntityCollectionName(tableName);
+          if (collectionName) {
+            entitySetName = collectionName;
+          } else {
+            entitySetName = tableName + 's'; // Fallback
           }
         }
         
@@ -180,21 +196,47 @@ const AppContent: React.FC = () => {
   return (
     <Content style={{ padding: 24 }}>
       <Space direction="vertical" style={{ width: '100%' }}>
-        {metadataService ? (
+        {metadataServiceReady ? (
           <QueryIntellisense
             value={query}
             onChange={setQuery}
-            metadataService={metadataService}
-            placeholder="Enter query"
+            metadataService={metadataService!}
+            placeholder="SELECT * FROM account or SELECT name, email FROM contact ↵ Use Tab/Enter for autocomplete"
             rows={4}
           />
         ) : (
-          <Input.TextArea
-            rows={4}
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-            placeholder="Enter query"
-          />
+          <div style={{ position: 'relative' }}>
+            <Input.TextArea
+              rows={4}
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder="⏳ Initializing query builder, please wait..."
+              disabled={true}
+              style={{ 
+                fontFamily: 'monospace',
+                backgroundColor: '#f5f5f5',
+                cursor: 'not-allowed'
+              }}
+            />
+            <div style={{ 
+              position: 'absolute', 
+              top: '8px', 
+              right: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}>
+              <Spin size="small" />
+              <span style={{ fontSize: '12px', color: '#666' }}>Initializing...</span>
+            </div>
+            <div style={{ 
+              fontSize: '11px', 
+              color: '#999', 
+              marginTop: '4px'
+            }}>
+              ⏳ Setting up query builder with intellisense...
+            </div>
+          </div>
         )}
         <Space wrap>
           <Select<QueryType> value={queryType} onChange={setQueryType} style={{ width: 120 }}>

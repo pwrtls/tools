@@ -15,7 +15,8 @@ export interface DataverseAttribute {
 
 export interface DataverseEntity {
   LogicalName: string;
-  EntitySetName?: string; // This is what we need for OData queries
+  EntitySetName?: string; // Used for Web API collections
+  LogicalCollectionName?: string; // Fallback - all lower-case collection name
   DisplayName: {
     UserLocalizedLabel?: {
       Label: string;
@@ -82,8 +83,9 @@ export class MetadataService {
       
       // First, get the list of entities using proper Dataverse Web API syntax
       // Based on Microsoft docs: https://learn.microsoft.com/en-us/power-apps/developer/data-platform/webapi/query-metadata-web-api
+      // Request both EntitySetName and LogicalCollectionName per entity metadata docs
       const entitiesResponse = await this.getAsJson<any>(
-        '/api/data/v9.0/EntityDefinitions?$select=LogicalName,DisplayName,EntitySetName'
+        '/api/data/v9.0/EntityDefinitions?$select=LogicalName,DisplayName,EntitySetName,LogicalCollectionName'
       );
 
       // Handle PowerTools API response format
@@ -101,6 +103,17 @@ export class MetadataService {
 
       const entities = entitiesData.value || [];
       console.log(`Fetched ${entities.length} entities`);
+
+      // Debug: Log the first few entities to see what properties we're getting
+      if (entities.length > 0) {
+        console.log('Sample entity properties:', JSON.stringify(entities.slice(0, 3).map((e: any) => ({
+          LogicalName: e.LogicalName,
+          EntitySetName: e.EntitySetName,
+          LogicalCollectionName: e.LogicalCollectionName,
+          hasEntitySetName: !!e.EntitySetName,
+          hasLogicalCollectionName: !!e.LogicalCollectionName
+        })), null, 2));
+      }
 
       // If we have no entities, return empty array
       if (entities.length === 0) {
@@ -239,5 +252,24 @@ export class MetadataService {
       lastFetched: 0,
       isLoading: false
     };
+  }
+
+  // Helper method to get the correct collection name for Web API queries
+  private getCollectionName(entity: DataverseEntity): string {
+    // Priority: EntitySetName > LogicalCollectionName > LogicalName + 's'
+    if (entity.EntitySetName) {
+      return entity.EntitySetName;
+    }
+    if (entity.LogicalCollectionName) {
+      return entity.LogicalCollectionName;
+    }
+    // Fallback to LogicalName + 's' (this is what we were always doing before)
+    return entity.LogicalName + 's';
+  }
+
+  public getEntityCollectionName(logicalName: string): string | null {
+    const entity = this.getEntityByName(logicalName);
+    if (!entity) return null;
+    return this.getCollectionName(entity);
   }
 } 
