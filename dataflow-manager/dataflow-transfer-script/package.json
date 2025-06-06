@@ -1,0 +1,17 @@
+{
+  "name": "dataflow-transfer-script",
+  "version": "1.0.0",
+  "description": "Standalone scripts to transfer Power Query dataflow ownership",
+  "main": "transfer-dataflows.js",
+  "type": "module",
+  "scripts": {
+    "start": "node transfer-dataflows.js"
+  },
+  "dependencies": {
+    "@azure/msal-node": "^2.6.6",
+    "axios": "^1.6.5",
+    "inquirer": "^9.2.12"
+  },
+  "author": "",
+  "license": "ISC"
+} 
