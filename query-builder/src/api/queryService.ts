@@ -2,13 +2,11 @@ import { usePowerToolsApi } from '../powertools/apiHook';
 import { 
     IODataResponse, 
     IQueryRequest, 
-    IQueryResult, 
-    QueryType, 
-    IApiError 
+    IQueryResult
 } from '../models';
 
 export const useQueryService = () => {
-    const { getAsJson, post } = usePowerToolsApi();
+    const { getAsJson } = usePowerToolsApi();
 
     const executeODataQuery = async (query: string, pageSize = 50): Promise<IQueryResult> => {
         try {

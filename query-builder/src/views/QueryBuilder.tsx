@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
     Layout, 
     Card, 
@@ -6,30 +6,29 @@ import {
     Button, 
     Table, 
     Alert, 
-    Spin, 
     Space, 
     Typography,
-    Tabs,
     Row,
     Col,
     Statistic,
-    message
+    message,
+    Tooltip
 } from 'antd';
 import { 
     PlayCircleOutlined, 
     DatabaseOutlined, 
     BugOutlined, 
     DownloadOutlined,
-    ClearOutlined 
+    ClearOutlined,
+    SwapOutlined
 } from '@ant-design/icons';
 import Editor from '@monaco-editor/react';
 import { useQueryService } from '../api/queryService';
-import { useMetadataService } from '../api/metadataService';
 import { QueryType, IQueryResult, IQueryRequest } from '../models';
+import { QueryConverter } from '../utils/queryConverter';
 
 const { Content } = Layout;
 const { Title, Text } = Typography;
-const { TabPane } = Tabs;
 
 interface QueryBuilderProps {
     onEntitySelect?: (entityName: string) => void;
@@ -40,13 +39,12 @@ export const QueryBuilder: React.FC<QueryBuilderProps> = ({ onEntitySelect }) =>
     const [query, setQuery] = useState<string>('');
     const [loading, setLoading] = useState(false);
     const [result, setResult] = useState<IQueryResult | null>(null);
-    const [selectedEntity, setSelectedEntity] = useState<string>('');
+    const [conversionWarnings, setConversionWarnings] = useState<string[]>([]);
     
     const queryService = useQueryService();
-    const metadataService = useMetadataService();
 
-    // Sample queries for each type
-    const sampleQueries = {
+    // Sample queries for each type (memoized to prevent re-creation on every render)
+    const sampleQueries = useMemo(() => ({
         odata: '/api/data/v9.2/accounts?$select=name,accountnumber,createdon&$top=10',
         fetchxml: `<fetch version="1.0" output-format="xml-platform" mapping="logical" distinct="false">
   <entity name="account">
@@ -59,15 +57,47 @@ export const QueryBuilder: React.FC<QueryBuilderProps> = ({ onEntitySelect }) =>
     </filter>
   </entity>
 </fetch>`,
-        sql: 'SELECT name, accountnumber, createdon FROM account WHERE statecode = 0 ORDER BY name'
-    };
+        sql: 'SELECT name, accountnumber, createdon FROM account WHERE statecode = 0 ORDER BY name LIMIT 10'
+    }), []);
 
-    // Load sample query when query type changes
+    // Load sample query when query type changes (only if query is empty)
     useEffect(() => {
         if (!query.trim()) {
             setQuery(sampleQueries[queryType]);
+            setConversionWarnings([]);
         }
-    }, [queryType]);
+    }, [queryType, query, sampleQueries]);
+
+    // Handle query type change with automatic conversion
+    const handleQueryTypeChange = (newQueryType: QueryType) => {
+        if (newQueryType === queryType) return;
+
+        // If there's a query to convert, attempt conversion
+        if (query.trim()) {
+            const conversionResult = QueryConverter.convert(query, queryType, newQueryType);
+            
+            if (conversionResult.success) {
+                setQuery(conversionResult.query);
+                setConversionWarnings(conversionResult.warnings || []);
+                
+                if (conversionResult.warnings && conversionResult.warnings.length > 0) {
+                    message.info(`Query converted from ${queryType.toUpperCase()} to ${newQueryType.toUpperCase()}`);
+                }
+            } else {
+                // If conversion fails, show error and load sample instead
+                message.error(`Failed to convert query: ${conversionResult.error}`);
+                setQuery(sampleQueries[newQueryType]);
+                setConversionWarnings([]);
+            }
+        } else {
+            // No query to convert, just load the sample
+            setQuery(sampleQueries[newQueryType]);
+            setConversionWarnings([]);
+        }
+
+        setQueryType(newQueryType);
+        setResult(null); // Clear previous results
+    };
 
     const handleExecuteQuery = async () => {
         if (!query.trim()) {
@@ -106,11 +136,13 @@ export const QueryBuilder: React.FC<QueryBuilderProps> = ({ onEntitySelect }) =>
     const handleClearQuery = () => {
         setQuery('');
         setResult(null);
+        setConversionWarnings([]);
     };
 
     const handleLoadSample = () => {
         setQuery(sampleQueries[queryType]);
         setResult(null);
+        setConversionWarnings([]);
     };
 
     const getEditorLanguage = (type: QueryType): string => {
@@ -219,21 +251,45 @@ export const QueryBuilder: React.FC<QueryBuilderProps> = ({ onEntitySelect }) =>
                     Build and execute queries against Dynamics 365 / Power Platform using OData, FetchXML, or SQL syntax.
                 </Text>
 
+                {conversionWarnings.length > 0 && (
+                    <Alert
+                        message="Query Converted"
+                        description={
+                            <div>
+                                <p>Your query was automatically converted to {queryType.toUpperCase()} format:</p>
+                                <ul>
+                                    {conversionWarnings.map((warning, index) => (
+                                        <li key={index}>{warning}</li>
+                                    ))}
+                                </ul>
+                            </div>
+                        }
+                        type="info"
+                        showIcon
+                        closable
+                        onClose={() => setConversionWarnings([])}
+                        style={{ marginTop: 16 }}
+                    />
+                )}
+
                 <Row gutter={16} style={{ marginTop: 24 }}>
                     <Col span={24}>
                         <Card
                             title="Query Editor"
                             extra={
                                 <Space>
-                                    <Select
-                                        value={queryType}
-                                        onChange={setQueryType}
-                                        style={{ width: 120 }}
-                                    >
-                                        <Select.Option value="odata">OData</Select.Option>
-                                        <Select.Option value="fetchxml">FetchXML</Select.Option>
-                                        <Select.Option value="sql">SQL</Select.Option>
-                                    </Select>
+                                    <Tooltip title="Automatically converts queries between formats">
+                                        <Select
+                                            value={queryType}
+                                            onChange={handleQueryTypeChange}
+                                            style={{ width: 120 }}
+                                            suffixIcon={<SwapOutlined />}
+                                        >
+                                            <Select.Option value="odata">OData</Select.Option>
+                                            <Select.Option value="fetchxml">FetchXML</Select.Option>
+                                            <Select.Option value="sql">SQL</Select.Option>
+                                        </Select>
+                                    </Tooltip>
                                     <Button onClick={handleLoadSample} icon={<BugOutlined />}>
                                         Load Sample
                                     </Button>

@@ -2,8 +2,7 @@ import { usePowerToolsApi } from '../powertools/apiHook';
 import { 
     IODataResponse, 
     IEntityMetadata, 
-    IAttributeMetadata, 
-    IApiError 
+    IAttributeMetadata
 } from '../models';
 
 export const useMetadataService = () => {
