@@ -23,8 +23,10 @@ export const useQueryService = () => {
             const url = new URL(query, 'https://dummy.com');
             const params = new URLSearchParams(url.search);
             
-            // Add or override $top parameter for pagination
-            params.set('$top', pageSize.toString());
+            // Only set $top if the user didn't specify it
+            if (!params.has('$top')) {
+                params.set('$top', pageSize.toString());
+            }
 
             const response = await getAsJson<IODataResponse<any>>(
                 url.pathname,
