@@ -26,9 +26,39 @@ import Editor from '@monaco-editor/react';
 import { useQueryService } from '../api/queryService';
 import { QueryType, IQueryResult, IQueryRequest } from '../models';
 import { QueryConverter } from '../utils/queryConverter';
+import { Resizable } from 'react-resizable';
+import type { ResizeCallbackData } from 'react-resizable';
 
 const { Content } = Layout;
 const { Title, Text } = Typography;
+
+// Resizable Title Component for table columns
+const ResizableTitle = (props: any) => {
+    const { onResize, width, ...restProps } = props;
+
+    if (!width) {
+        return <th {...restProps} />;
+    }
+
+    return (
+        <Resizable
+            width={width}
+            height={0}
+            handle={
+                <span
+                    className="react-resizable-handle"
+                    onClick={(e) => {
+                        e.stopPropagation();
+                    }}
+                />
+            }
+            onResize={onResize}
+            draggableOpts={{ enableUserSelectHack: false }}
+        >
+            <th {...restProps} />
+        </Resizable>
+    );
+};
 
 interface QueryBuilderProps {
     onEntitySelect?: (entityName: string) => void;
@@ -40,6 +70,7 @@ export const QueryBuilder: React.FC<QueryBuilderProps> = ({ onEntitySelect }) =>
     const [loading, setLoading] = useState(false);
     const [result, setResult] = useState<IQueryResult | null>(null);
     const [conversionWarnings, setConversionWarnings] = useState<string[]>([]);
+    const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
     
     const queryService = useQueryService();
 
@@ -115,6 +146,7 @@ export const QueryBuilder: React.FC<QueryBuilderProps> = ({ onEntitySelect }) =>
 
             const queryResult = await queryService.executeQuery(request);
             setResult(queryResult);
+            setColumnWidths({}); // Reset column widths for new query results
 
             if (queryResult.success) {
                 message.success(`Query executed successfully. Retrieved ${queryResult.data?.length || 0} records.`);
@@ -137,6 +169,7 @@ export const QueryBuilder: React.FC<QueryBuilderProps> = ({ onEntitySelect }) =>
         setQuery('');
         setResult(null);
         setConversionWarnings([]);
+        setColumnWidths({}); // Reset column widths
     };
 
     const handleLoadSample = () => {
@@ -185,21 +218,36 @@ export const QueryBuilder: React.FC<QueryBuilderProps> = ({ onEntitySelect }) =>
 
         // Generate columns from the first record
         const firstRecord = result.data[0];
-        const columns = Object.keys(firstRecord).map(key => ({
-            title: key,
-            dataIndex: key,
-            key: key,
-            render: (value: any) => {
-                if (value === null || value === undefined) {
-                    return <Text type="secondary">null</Text>;
-                }
-                if (typeof value === 'object') {
-                    return <Text code>{JSON.stringify(value)}</Text>;
-                }
-                return String(value);
-            },
-            ellipsis: true
-        }));
+        const columns = Object.keys(firstRecord).map(key => {
+            const defaultWidth = 150;
+            const width = columnWidths[key] || defaultWidth;
+            
+            return {
+                title: key,
+                dataIndex: key,
+                key: key,
+                width: width,
+                render: (value: any) => {
+                    if (value === null || value === undefined) {
+                        return <Text type="secondary">null</Text>;
+                    }
+                    if (typeof value === 'object') {
+                        return <Text code>{JSON.stringify(value)}</Text>;
+                    }
+                    return String(value);
+                },
+                ellipsis: true,
+                onHeaderCell: (column: any) => ({
+                    width: width,
+                    onResize: (e: any, { size }: ResizeCallbackData) => {
+                        setColumnWidths(prev => ({
+                            ...prev,
+                            [key]: size.width
+                        }));
+                    },
+                }),
+            };
+        });
 
         // Add row keys
         const dataWithKeys = result.data.map((record, index) => ({
@@ -243,6 +291,11 @@ export const QueryBuilder: React.FC<QueryBuilderProps> = ({ onEntitySelect }) =>
                 <Table
                     columns={columns}
                     dataSource={dataWithKeys}
+                    components={{
+                        header: {
+                            cell: ResizableTitle,
+                        },
+                    }}
                     pagination={{
                         pageSize: 25,
                         showSizeChanger: true,

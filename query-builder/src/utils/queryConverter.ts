@@ -282,33 +282,129 @@ export class QueryConverter {
 
     private static sqlToOdata(sqlQuery: string): QueryConversionResult {
         try {
-            // Basic SQL parsing (this is a simplified implementation)
-            const sql = sqlQuery.trim().toLowerCase();
+            // Enhanced SQL parsing with JOIN support
+            const sql = sqlQuery.trim();
+            const sqlClean = sql.replace(/\s+/g, ' ').toLowerCase();
             
-            // Extract SELECT fields
-            const selectMatch = sql.match(/select\s+(.*?)\s+from/);
-            const fromMatch = sql.match(/from\s+(\w+)/);
-            const whereMatch = sql.match(/where\s+(.*?)(?:\s+order\s+by|\s+limit|$)/);
-            const orderMatch = sql.match(/order\s+by\s+(.*?)(?:\s+limit|$)/);
-            const limitMatch = sql.match(/limit\s+(\d+)/);
+            // Extract different parts of the SQL query (using basic regex without ES2018 flags)
+            const selectMatch = sqlClean.match(/select\s+(.*?)\s+from/);
+            const fromMatch = sqlClean.match(/from\s+(\w+)(?:\s+(\w+))?/);
+            // Find all JOIN clauses manually
+            const joinMatches: Array<{ table: string, alias?: string, condition: string }> = [];
+            const joinRegex = /(?:inner\s+|left\s+|right\s+)?join\s+(\w+)(?:\s+(\w+))?\s+on\s+(.*?)(?=\s+(?:join|where|order|limit|$))/gi;
+            let match;
+            while ((match = joinRegex.exec(sqlClean)) !== null) {
+                joinMatches.push({
+                    table: match[1],
+                    alias: match[2],
+                    condition: match[3]
+                });
+            }
+            const whereMatch = sqlClean.match(/where\s+(.*?)(?:\s+order\s+by|\s+limit|$)/);
+            const orderMatch = sqlClean.match(/order\s+by\s+(.*?)(?:\s+limit|$)/);
+            const limitMatch = sqlClean.match(/limit\s+(\d+)/);
             
             if (!fromMatch) {
                 throw new Error('No FROM clause found');
             }
             
-            const tableName = fromMatch[1];
-            const entitySet = this.singularToPlural(tableName);
+            const primaryTable = fromMatch[1];
+            const primaryAlias = fromMatch[2] || primaryTable;
+            const primaryEntitySet = this.singularToPlural(primaryTable);
             
-            let odataUrl = `/api/data/v9.2/${entitySet}`;
+            let odataUrl = `/api/data/v9.2/${primaryEntitySet}`;
             const params = new URLSearchParams();
+            const warnings: string[] = [];
             
-            // Handle SELECT
+            // Parse SELECT fields and organize by table/alias
+            const selectFields: { [key: string]: string[] } = {};
+            let hasJoins = joinMatches.length > 0;
+            
             if (selectMatch && selectMatch[1].trim() !== '*') {
                 const fields = selectMatch[1].split(',').map(f => f.trim());
-                params.set('$select', fields.join(','));
+                
+                fields.forEach(field => {
+                    // Handle aliased fields like "table.field" or "alias.field"
+                    const fieldMatch = field.match(/(?:(\w+)\.)?(\w+)/);
+                    if (fieldMatch) {
+                        const tableAlias = fieldMatch[1] || primaryAlias;
+                        const fieldName = fieldMatch[2];
+                        
+                        if (!selectFields[tableAlias]) {
+                            selectFields[tableAlias] = [];
+                        }
+                        selectFields[tableAlias].push(fieldName);
+                    }
+                });
             }
             
-            // Handle WHERE
+            // Handle JOINs by converting to $expand
+            const expandParts: string[] = [];
+            const joinInfo: { [alias: string]: { table: string, relationship: string } } = {};
+            
+            if (hasJoins) {
+                joinMatches.forEach(joinMatch => {
+                    const joinTable = joinMatch.table;
+                    const joinAlias = joinMatch.alias || joinTable;
+                    const joinCondition = joinMatch.condition;
+                    
+                    // Parse join condition to find the relationship
+                    // Example: "a.solutionid = b.solutionid" or "table1.field = table2.field"
+                    const conditionMatch = joinCondition.match(/(\w+)\.(\w+)\s*=\s*(\w+)\.(\w+)/);
+                    
+                    if (conditionMatch) {
+                        let relationshipField = '';
+                        let isPrimaryToSecondary = false;
+                        
+                        // Determine which side is the primary table
+                        if (conditionMatch[1] === primaryAlias || conditionMatch[1] === primaryTable) {
+                            relationshipField = conditionMatch[2];
+                            isPrimaryToSecondary = true;
+                        } else if (conditionMatch[3] === primaryAlias || conditionMatch[3] === primaryTable) {
+                            relationshipField = conditionMatch[4];
+                            isPrimaryToSecondary = false;
+                        }
+                        
+                        // Build the expand clause
+                        const joinEntitySet = this.singularToPlural(joinTable);
+                        let expandClause = '';
+                        
+                        if (isPrimaryToSecondary) {
+                            // Primary table has foreign key to joined table
+                            // Convert field name to navigation property name
+                            const navProperty = this.convertToNavigationProperty(relationshipField, joinTable);
+                            expandClause = navProperty;
+                        } else {
+                            // Joined table has foreign key to primary table (reverse lookup)
+                            // This is more complex and might need different handling
+                            expandClause = joinEntitySet;
+                            warnings.push(`Reverse lookup join detected for ${joinTable} - may need manual adjustment`);
+                        }
+                        
+                        // Add selected fields for this join
+                        if (selectFields[joinAlias] && selectFields[joinAlias].length > 0) {
+                            expandClause += `($select=${selectFields[joinAlias].join(',')})`;
+                        }
+                        
+                        expandParts.push(expandClause);
+                        joinInfo[joinAlias] = { table: joinTable, relationship: expandClause };
+                    } else {
+                        warnings.push(`Could not parse join condition: ${joinCondition}`);
+                    }
+                });
+            }
+            
+            // Set primary table select fields
+            if (selectFields[primaryAlias] && selectFields[primaryAlias].length > 0) {
+                params.set('$select', selectFields[primaryAlias].join(','));
+            }
+            
+            // Set expand parameter
+            if (expandParts.length > 0) {
+                params.set('$expand', expandParts.join(','));
+            }
+            
+            // Handle WHERE clause
             if (whereMatch) {
                 const whereClause = this.sqlWhereToODataFilter(whereMatch[1]);
                 params.set('$filter', whereClause);
@@ -318,7 +414,9 @@ export class QueryConverter {
             if (orderMatch) {
                 const orderBy = orderMatch[1].split(',').map(part => {
                     const trimmed = part.trim();
-                    return trimmed.replace(/\s+desc$/i, ' desc').replace(/\s+asc$/i, '');
+                    // Handle table-prefixed order fields
+                    const orderField = trimmed.replace(/^\w+\./, ''); // Remove table prefix
+                    return orderField.replace(/\s+desc$/i, ' desc').replace(/\s+asc$/i, '');
                 }).join(',');
                 params.set('$orderby', orderBy);
             }
@@ -333,10 +431,17 @@ export class QueryConverter {
                 odataUrl += '?' + queryString;
             }
             
+            if (hasJoins) {
+                warnings.push('SQL JOINs converted to OData $expand - verify navigation properties are correct');
+            }
+            if (warnings.length === 0) {
+                warnings.push('Basic SQL parsing - complex queries may not convert correctly');
+            }
+            
             return {
                 success: true,
                 query: odataUrl,
-                warnings: ['Basic SQL parsing - complex queries may not convert correctly']
+                warnings
             };
         } catch (error) {
             return {
@@ -414,6 +519,33 @@ export class QueryConverter {
         }
         
         return singular + 's';
+    }
+
+    private static convertToNavigationProperty(fieldName: string, targetTable: string): string {
+        // Common navigation property patterns in Dynamics 365
+        // This is a basic implementation - in real scenarios, you'd need metadata to get the exact navigation property names
+        
+        // Remove common suffixes to get base name
+        let navProperty = fieldName;
+        if (navProperty.endsWith('id')) {
+            navProperty = navProperty.slice(0, -2);
+        }
+        
+        // Add common navigation property suffixes based on target table
+        const targetSingular = this.pluralToSingular(targetTable);
+        
+        // Common patterns:
+        // solutionid -> solution (for lookup to solution table)
+        // parentaccountid -> parentaccount_account
+        // ownerid -> owninguser or owningteam
+        
+        if (navProperty === 'solution' || navProperty === 'solutionid') {
+            return 'solution';
+        }
+        
+        // For most cases, try the base navigation property name
+        // This might need adjustment based on actual Dataverse schema
+        return navProperty;
     }
 
     private static parseODataFilter(filter: string): Array<{attribute: string, operator: string, value: string}> {
