@@ -4,6 +4,7 @@ import {
     IQueryRequest, 
     IQueryResult
 } from '../models';
+import { QueryConverter } from '../utils/queryConverter';
 
 export const useQueryService = () => {
     const { getAsJson } = usePowerToolsApi();
@@ -143,14 +144,49 @@ export const useQueryService = () => {
                 return { isValid: false, error: 'SQL query must start with SELECT' };
             }
 
-            // Note: SQL queries against Dataverse would need to be converted to OData
-            // For now, we'll return an error indicating this limitation
-            return { 
-                isValid: false, 
-                error: 'Direct SQL execution is not supported. Please use OData or FetchXML queries.' 
-            };
+            // Check if it has a FROM clause (handle various whitespace patterns)
+            if (!/\bfrom\b/i.test(sql)) {
+                return { isValid: false, error: 'SQL query must include a FROM clause' };
+            }
+
+            return { isValid: true };
         } catch (error) {
             return { isValid: false, error: 'SQL validation failed' };
+        }
+    };
+
+    const executeSQLQuery = async (sqlQuery: string, pageSize = 50): Promise<IQueryResult> => {
+        try {
+            // Convert SQL to OData
+            const conversionResult = QueryConverter.convert(sqlQuery, 'sql', 'odata');
+            
+            if (!conversionResult.success) {
+                return {
+                    success: false,
+                    error: conversionResult.error || 'Failed to convert SQL to OData'
+                };
+            }
+
+            console.log('Converted SQL to OData:', conversionResult.query);
+            
+            // Execute the converted OData query
+            const result = await executeODataQuery(conversionResult.query, pageSize);
+            
+            // Add conversion warnings to the result
+            if (result.success && conversionResult.warnings) {
+                return {
+                    ...result,
+                    warnings: conversionResult.warnings
+                };
+            }
+            
+            return result;
+        } catch (error: any) {
+            console.error('Error executing SQL query:', error);
+            return {
+                success: false,
+                error: error?.message || 'Failed to execute SQL query'
+            };
         }
     };
 
@@ -177,8 +213,7 @@ export const useQueryService = () => {
                 if (!sqlValidation.isValid) {
                     return { success: false, error: sqlValidation.error };
                 }
-                // SQL execution would go here if supported
-                return { success: false, error: 'SQL execution not yet implemented' };
+                return executeSQLQuery(query, pageSize);
 
             default:
                 return { success: false, error: 'Unsupported query type' };
@@ -227,6 +262,7 @@ export const useQueryService = () => {
         executeQuery,
         executeODataQuery,
         executeFetchXMLQuery,
+        executeSQLQuery,
         validateODataQuery,
         validateFetchXMLQuery,
         validateSQLQuery,

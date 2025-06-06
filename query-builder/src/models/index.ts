@@ -79,6 +79,7 @@ export interface IQueryResult {
     totalCount?: number;
     hasMore?: boolean;
     nextLink?: string;
+    warnings?: string[];
 }
 
 export interface IQuerySuggestion {

@@ -209,6 +209,22 @@ export const QueryBuilder: React.FC<QueryBuilderProps> = ({ onEntitySelect }) =>
 
         return (
             <div>
+                {result.warnings && result.warnings.length > 0 && (
+                    <Alert
+                        message="Execution Warnings"
+                        description={
+                            <ul style={{ margin: 0, paddingLeft: 20 }}>
+                                {result.warnings.map((warning, index) => (
+                                    <li key={index}>{warning}</li>
+                                ))}
+                            </ul>
+                        }
+                        type="warning"
+                        showIcon
+                        style={{ marginBottom: 16 }}
+                    />
+                )}
+                
                 <Row gutter={16} style={{ marginBottom: 16 }}>
                     <Col span={6}>
                         <Statistic title="Records Returned" value={result.data.length} />
