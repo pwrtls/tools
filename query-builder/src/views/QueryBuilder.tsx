@@ -218,6 +218,17 @@ export const QueryBuilder: React.FC<QueryBuilderProps> = ({ onEntitySelect }) =>
 
         // Generate columns from the first record
         const firstRecord = result.data[0];
+        if (!firstRecord) {
+            return (
+                <Alert
+                    message="Invalid Data Format"
+                    description="The query returned data in an unexpected format."
+                    type="error"
+                    showIcon
+                />
+            );
+        }
+        
         const columns = Object.keys(firstRecord).map(key => {
             const defaultWidth = 150;
             const width = columnWidths[key] || defaultWidth;

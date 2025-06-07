@@ -15,9 +15,16 @@ export const useQueryService = () => {
                     'Content-Type': 'text/plain',
                 });
 
-                if (proxyResponse.StatusCode >= 400) {
-                    const errorResponse = JSON.parse(proxyResponse.content || '{}');
-                    return { success: false, error: errorResponse.error || `Request failed with status ${proxyResponse.StatusCode}` };
+                // Log the actual response structure for debugging
+                console.log('SQL Proxy Response:', proxyResponse);
+
+                if (proxyResponse.statusCode >= 400) {
+                    try {
+                        const errorResponse = JSON.parse(proxyResponse.content || '{}');
+                        return { success: false, error: errorResponse.error || `Request failed with status ${proxyResponse.statusCode}` };
+                    } catch (parseError) {
+                        return { success: false, error: `Request failed with status ${proxyResponse.statusCode}: ${proxyResponse.content || 'Unknown error'}` };
+                    }
                 }
 
                 const responseData = JSON.parse(proxyResponse.content || '[]');
