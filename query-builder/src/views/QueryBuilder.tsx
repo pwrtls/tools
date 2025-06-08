@@ -88,7 +88,16 @@ export const QueryBuilder: React.FC<QueryBuilderProps> = ({ onEntitySelect }) =>
     </filter>
   </entity>
 </fetch>`,
-        sql: 'SELECT name, accountnumber, createdon FROM account WHERE statecode = 0 ORDER BY name LIMIT 10'
+        sql: `SELECT TOP 10
+    m.createdon,
+    m.solutionid,
+    s.friendlyname,
+    s.description,
+    m.msdyn_name
+FROM msdyn_datainsightsandanalyticsfeature m
+INNER JOIN solution s
+    ON m.solutionid = s.solutionid
+WHERE m.statecode = 0`
     }), []);
 
     // Load sample query when query type changes (only if query is empty)
@@ -198,7 +207,37 @@ export const QueryBuilder: React.FC<QueryBuilderProps> = ({ onEntitySelect }) =>
             return (
                 <Alert
                     message="Query Error"
-                    description={result.error}
+                    description={
+                        <div>
+                            <p>{result.error}</p>
+                            {result.errorDetails && (
+                                <div style={{ marginTop: 8 }}>
+                                    <Text type="secondary">Details:</Text>
+                                    <div style={{ 
+                                        marginTop: 4, 
+                                        padding: 8, 
+                                        background: '#f5f5f5', 
+                                        borderRadius: 4,
+                                        maxHeight: '200px',
+                                        overflow: 'auto',
+                                        fontFamily: 'monospace',
+                                        fontSize: '12px',
+                                        whiteSpace: 'pre-wrap'
+                                    }}>
+                                        {result.errorDetails.type && (
+                                            <div>Type: {result.errorDetails.type}</div>
+                                        )}
+                                        {result.errorDetails.requestId && (
+                                            <div>Request ID: {result.errorDetails.requestId}</div>
+                                        )}
+                                        {result.errorDetails.time && (
+                                            <div>Time: {new Date(result.errorDetails.time).toLocaleString()}</div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    }
                     type="error"
                     showIcon
                 />

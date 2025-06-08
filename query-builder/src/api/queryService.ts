@@ -11,8 +11,12 @@ export const useQueryService = () => {
             const { queryType, query } = request;
 
             if (queryType === 'sql') {
-                const proxyResponse = await post(`__sql__/query`, query, {
-                    'Content-Type': 'text/plain',
+                // Normalize the query string by removing extra whitespace but preserving structure
+                const normalizedQuery = query.trim();
+
+                console.log('Making API POST request:', '__sql__/query');
+                const proxyResponse = await post('__sql__/query', normalizedQuery, {
+                    'Content-Type': 'text/plain'
                 });
 
                 // Log the actual response structure for debugging
@@ -20,20 +24,48 @@ export const useQueryService = () => {
 
                 if (proxyResponse.statusCode >= 400) {
                     try {
-                        const errorResponse = JSON.parse(proxyResponse.content || '{}');
-                        return { success: false, error: errorResponse.error || `Request failed with status ${proxyResponse.statusCode}` };
+                        const errorData = await proxyResponse.asJson();
+                        console.error('Proxy error response:', errorData);
+                        
+                        let errorMessage = 'An error occurred while executing the query.';
+                        let errorDetails = null;
+
+                        if (errorData.error) {
+                            errorMessage = errorData.error;
+                        }
+
+                        if (errorData.errorDetails) {
+                            const details = errorData.errorDetails;
+                            errorDetails = {
+                                type: details.type,
+                                message: details.message,
+                                requestId: details.requestId,
+                                time: details.time
+                            };
+                        }
+
+                        return {
+                            success: false,
+                            error: errorMessage,
+                            errorDetails
+                        };
                     } catch (parseError) {
-                        return { success: false, error: `Request failed with status ${proxyResponse.statusCode}: ${proxyResponse.content || 'Unknown error'}` };
+                        return {
+                            success: false,
+                            error: `Request failed with status ${proxyResponse.statusCode}: ${proxyResponse.content || 'Unknown error'}`,
+                            errorDetails: proxyResponse.content
+                        };
                     }
                 }
 
-                const responseData = JSON.parse(proxyResponse.content || '[]');
+                const result = await proxyResponse.asJson();
                 
+                // The TDS Helper returns a direct JSON array, not an OData object.
                 return {
                     success: true,
-                    data: responseData,
-                    totalCount: responseData.length,
-                    hasMore: false,
+                    data: result,
+                    totalCount: Array.isArray(result) ? result.length : 0,
+                    hasMore: false, // TDS helper doesn't support pagination currently
                 };
 
             } else {
