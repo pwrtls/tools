@@ -1,7 +1,7 @@
 import React from 'react';
 import { ConfigProvider } from 'antd';
 import { PowerToolsContextProvider } from './powertools/context';
-import AppRouter from './AppRouter';
+import { AppRouter } from './AppRouter';
 import './App.css';
 
 const App: React.FC = () => {

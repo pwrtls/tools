@@ -1,6 +1,6 @@
 {
-  "short_name": "React App",
-  "name": "Create React App Sample",
+  "short_name": "Query Builder",
+  "name": "Query Builder - Dynamics 365 Query Tool",
   "icons": [
     {
       "src": "favicon.ico",
@@ -18,8 +18,12 @@
       "sizes": "512x512"
     }
   ],
-  "start_url": ".",
+  "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "theme_color": "#000000",
-  "background_color": "#ffffff"
+  "background_color": "#ffffff",
+  "orientation": "any",
+  "dir": "ltr",
+  "lang": "en-US"
 }
