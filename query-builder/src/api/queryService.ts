@@ -79,13 +79,16 @@ export const useQueryService = () => {
                     const entityLogicalName = entityNameMatch[1];
                     const entitySetName = await getEntitySetName(entityLogicalName);
 
+                    // Remove distinct attribute if present as it's not supported
+                    const modifiedQuery = query.replace(/distinct=['"]true['"]/g, '');
+
                     // Extract top value from FetchXML
-                    const topMatch = /<fetch[^>]*top=['"]([^'"]+)['"][^>]*>/.exec(query);
+                    const topMatch = /<fetch[^>]*top=['"]([^'"]+)['"][^>]*>/.exec(modifiedQuery);
                     const topValue = topMatch ? topMatch[1] : '5000';
 
                     // Execute FetchXML directly using GET request to the entity set endpoint
                     const params = new URLSearchParams();
-                    params.set('fetchXml', query); // URLSearchParams handles encoding
+                    params.set('fetchXml', modifiedQuery); // URLSearchParams handles encoding
                     params.set('$top', topValue); // Add explicit top parameter for Web API
 
                     const proxyResponse = await get(
@@ -105,12 +108,12 @@ export const useQueryService = () => {
                     
                     // For FetchXML, we need to parse the next page from the query
                     let nextPage: string | undefined = undefined;
-                    const pageMatch = /page="(\d+)"/.exec(query);
+                    const pageMatch = /page="(\d+)"/.exec(modifiedQuery);
                     const currentPage = pageMatch ? parseInt(pageMatch[1], 10) : 1;
                     
                     // Create next page query if we have results and there's a next link
                     if (odataResponse.value && odataResponse.value.length > 0 && odataResponse['@odata.nextLink']) {
-                        const nextPageQuery = query.replace(/page="\d+"/, `page="${currentPage + 1}"`);
+                        const nextPageQuery = modifiedQuery.replace(/page="\d+"/, `page="${currentPage + 1}"`);
                         nextPage = nextPageQuery;
                     }
                     
@@ -119,6 +122,7 @@ export const useQueryService = () => {
                         data: odataResponse.value,
                         hasMore: !!nextPage,
                         nextLink: nextPage,
+                        warnings: query !== modifiedQuery ? ['Distinct operator removed as it is not supported in FetchXML queries'] : undefined
                     };
                 } catch (error: any) {
                     console.error('Error executing FetchXML query:', error);
