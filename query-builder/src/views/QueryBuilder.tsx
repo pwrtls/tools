@@ -27,6 +27,8 @@ import { parseEntityName, registerCompletionProviders } from '../utils/intellise
 import { useMetadataService } from '../api/metadataService';
 import { Resizable } from 'react-resizable';
 import type { ResizeCallbackData } from 'react-resizable';
+import { convertToCsv } from '../utils/export';
+import { usePowerToolsApi } from '../powertools/apiHook';
 
 const { Content } = Layout;
 const { Title, Text } = Typography;
@@ -73,6 +75,7 @@ export const QueryBuilder: React.FC<QueryBuilderProps> = ({ onEntitySelect }) =>
     const [showEtagColumn, setShowEtagColumn] = useState(false);
 
     const { fetchEntityAttributes, getAllEntities } = useMetadataService();
+    const { download } = usePowerToolsApi();
     const allEntitiesRef = React.useRef<any[]>([]);
     const previousEntityNameRef = React.useRef<string | null>(null);
 
@@ -395,6 +398,13 @@ WHERE statecode = 0`
         );
     };
 
+    const handleExport = () => {
+        if (result && result.success && result.data) {
+            const csv = convertToCsv(result.data);
+            download(csv, 'query-results.csv', 'text/csv');
+        }
+    };
+
     return (
         <Layout>
             <Content style={{ padding: '24px', minHeight: '100vh' }}>
@@ -461,7 +471,7 @@ WHERE statecode = 0`
                             extra={
                                 <Space>
                                     {result?.success && result.data && (
-                                        <Button icon={<DownloadOutlined />}>
+                                        <Button icon={<DownloadOutlined />} onClick={handleExport}>
                                             Export Results
                                         </Button>
                                     )}
