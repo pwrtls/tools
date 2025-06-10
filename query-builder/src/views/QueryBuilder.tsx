@@ -11,21 +11,17 @@ import {
     Row,
     Col,
     Statistic,
-    App,
-    Tooltip
+    App
 } from 'antd';
 import { 
     PlayCircleOutlined, 
     DatabaseOutlined, 
-    BugOutlined, 
     DownloadOutlined,
-    ClearOutlined,
     SwapOutlined
 } from '@ant-design/icons';
 import Editor from '@monaco-editor/react';
 import { useQueryService } from '../api/queryService';
 import { QueryType, IQueryResult, IQueryRequest } from '../models';
-import { QueryConverter } from '../utils/queryConverter';
 import { parseEntityName, registerCompletionProviders } from '../utils/intellisense';
 import { useMetadataService } from '../api/metadataService';
 import { Resizable } from 'react-resizable';
@@ -161,22 +157,8 @@ WHERE statecode = 0`
     const handleQueryTypeChange = (newQueryType: QueryType) => {
         if (newQueryType === queryType) return;
 
-        // If there's a query to convert, attempt conversion
-        if (query.trim()) {
-            const conversionResult = QueryConverter.convert(query, queryType, newQueryType);
-            
-            if (conversionResult.success) {
-                setQuery(conversionResult.query);
-            } else {
-                // If conversion fails, show error and load sample instead
-                message.error(`Failed to convert query: ${conversionResult.error}`);
-                setQuery(sampleQueries[newQueryType]);
-            }
-        } else {
-            // No query to convert, just load the sample
-            setQuery(sampleQueries[newQueryType]);
-        }
-
+        // Load the sample query for the new type
+        setQuery(sampleQueries[newQueryType]);
         setQueryType(newQueryType);
         setResult(null); // Clear previous results
     };
@@ -403,18 +385,16 @@ WHERE statecode = 0`
                             }
                             extra={
                                 <Space>
-                                    <Tooltip title="Automatically converts queries between formats">
-                                        <Select
-                                            value={queryType}
-                                            onChange={handleQueryTypeChange}
-                                            style={{ width: 120 }}
-                                            suffixIcon={<SwapOutlined />}
-                                        >
-                                            <Select.Option value="odata">OData</Select.Option>
-                                            <Select.Option value="fetchxml">FetchXML</Select.Option>
-                                            <Select.Option value="sql">SQL</Select.Option>
-                                        </Select>
-                                    </Tooltip>
+                                    <Select
+                                        value={queryType}
+                                        onChange={handleQueryTypeChange}
+                                        style={{ width: 120 }}
+                                        suffixIcon={<SwapOutlined />}
+                                    >
+                                        <Select.Option value="odata">OData</Select.Option>
+                                        <Select.Option value="fetchxml">FetchXML</Select.Option>
+                                        <Select.Option value="sql">SQL</Select.Option>
+                                    </Select>
                                     <Button 
                                         type="primary" 
                                         onClick={handleExecuteQuery}
