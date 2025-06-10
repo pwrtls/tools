@@ -70,7 +70,6 @@ export const QueryBuilder: React.FC<QueryBuilderProps> = ({ onEntitySelect }) =>
     const [query, setQuery] = useState<string>('');
     const [loading, setLoading] = useState(false);
     const [result, setResult] = useState<IQueryResult | null>(null);
-    const [conversionWarnings, setConversionWarnings] = useState<string[]>([]);
     const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
     
     const queryService = useQueryService();
@@ -90,22 +89,17 @@ export const QueryBuilder: React.FC<QueryBuilderProps> = ({ onEntitySelect }) =>
   </entity>
 </fetch>`,
         sql: `SELECT TOP 10
-    m.createdon,
-    m.solutionid,
-    s.friendlyname,
-    s.description,
-    m.msdyn_name
-FROM msdyn_datainsightsandanalyticsfeature m
-INNER JOIN solution s
-    ON m.solutionid = s.solutionid
-WHERE m.statecode = 0`
+    name,
+    accountnumber,
+    createdon
+FROM account
+WHERE statecode = 0`
     }), []);
 
     // Load sample query when query type changes (only if query is empty)
     useEffect(() => {
         if (!query.trim()) {
             setQuery(sampleQueries[queryType]);
-            setConversionWarnings([]);
         }
     }, [queryType, query, sampleQueries]);
 
@@ -119,17 +113,14 @@ WHERE m.statecode = 0`
             
             if (conversionResult.success) {
                 setQuery(conversionResult.query);
-                setConversionWarnings(conversionResult.warnings || []);
             } else {
                 // If conversion fails, show error and load sample instead
                 message.error(`Failed to convert query: ${conversionResult.error}`);
                 setQuery(sampleQueries[newQueryType]);
-                setConversionWarnings([]);
             }
         } else {
             // No query to convert, just load the sample
             setQuery(sampleQueries[newQueryType]);
-            setConversionWarnings([]);
         }
 
         setQueryType(newQueryType);
@@ -174,14 +165,12 @@ WHERE m.statecode = 0`
     const handleClearQuery = () => {
         setQuery('');
         setResult(null);
-        setConversionWarnings([]);
         setColumnWidths({}); // Reset column widths
     };
 
     const handleLoadSample = () => {
         setQuery(sampleQueries[queryType]);
         setResult(null);
-        setConversionWarnings([]);
     };
 
     const getEditorLanguage = (type: QueryType): string => {
