@@ -11,7 +11,8 @@ import {
     Row,
     Col,
     Statistic,
-    App
+    App,
+    Switch
 } from 'antd';
 import { 
     PlayCircleOutlined, 
@@ -69,6 +70,7 @@ export const QueryBuilder: React.FC<QueryBuilderProps> = ({ onEntitySelect }) =>
     const [loading, setLoading] = useState(false);
     const [result, setResult] = useState<IQueryResult | null>(null);
     const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
+    const [showEtagColumn, setShowEtagColumn] = useState(false);
 
     const { fetchEntityAttributes, getAllEntities } = useMetadataService();
     const allEntitiesRef = React.useRef<any[]>([]);
@@ -287,7 +289,13 @@ WHERE statecode = 0`
             );
         }
         
-        const columns = Object.keys(firstRecord).map(key => {
+        let columnKeys = Object.keys(firstRecord);
+
+        if (!showEtagColumn) {
+            columnKeys = columnKeys.filter(key => key !== '@odata.etag');
+        }
+
+        const columns = columnKeys.map(key => {
             const defaultWidth = 150;
             const width = columnWidths[key] || defaultWidth;
             
@@ -374,6 +382,14 @@ WHERE statecode = 0`
                     }}
                     scroll={{ x: true, y: 400 }}
                     size="small"
+                    footer={() => (
+                        result?.success && result.data && result.data[0]?.['@odata.etag'] && (
+                            <Space>
+                                <Switch size="small" checked={showEtagColumn} onChange={setShowEtagColumn} />
+                                <Text>Show ETag</Text>
+                            </Space>
+                        )
+                    )}
                 />
             </div>
         );
@@ -443,11 +459,13 @@ WHERE statecode = 0`
                             title="Query Results" 
                             loading={loading}
                             extra={
-                                result?.success && result.data && (
-                                    <Button icon={<DownloadOutlined />}>
-                                        Export Results
-                                    </Button>
-                                )
+                                <Space>
+                                    {result?.success && result.data && (
+                                        <Button icon={<DownloadOutlined />}>
+                                            Export Results
+                                        </Button>
+                                    )}
+                                </Space>
                             }
                         >
                             {renderQueryResults()}
