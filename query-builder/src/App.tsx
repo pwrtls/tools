@@ -17,9 +17,9 @@ const App: React.FC = () => {
       }}
     >
       <AntApp>
-        <PowerToolsContextProvider showNoConnection>
-          <AppRouter />
-        </PowerToolsContextProvider>
+      <PowerToolsContextProvider showNoConnection>
+        <AppRouter />
+      </PowerToolsContextProvider>
       </AntApp>
     </ConfigProvider>
   );

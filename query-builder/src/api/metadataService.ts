@@ -15,9 +15,7 @@ export const useMetadataService = () => {
     const fetchAllEntities = async (): Promise<IEntityMetadata[]> => {
         try {
             const query = new URLSearchParams();
-            query.set('$select', 'LogicalName,EntitySetName,MetadataId,DisplayName,SchemaName,PrimaryIdAttribute,PrimaryNameAttribute,IsCustomEntity,OwnershipType');
-            query.set('$filter', 'IsValidForAdvancedFind eq true and IsIntersect eq false');
-            query.set('$orderby', 'DisplayName/UserLocalizedLabel/Label');
+            query.set('$select', 'LogicalName,EntitySetName,MetadataId,DisplayName,SchemaName');
 
             const response = await getAsJson<IODataResponse<IEntityMetadata>>(
                 '/api/data/v9.2/EntityDefinitions',

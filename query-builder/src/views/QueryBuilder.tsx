@@ -73,8 +73,6 @@ export const QueryBuilder: React.FC<QueryBuilderProps> = ({ onEntitySelect }) =>
     const [loading, setLoading] = useState(false);
     const [result, setResult] = useState<IQueryResult | null>(null);
     const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
-    const [currentEntity, setCurrentEntity] = useState<string | null>(null);
-    const [attributes, setAttributes] = useState<any[]>([]);
 
     const { fetchEntityAttributes, getAllEntities } = useMetadataService();
     const allEntitiesRef = React.useRef<any[]>([]);
@@ -92,18 +90,34 @@ export const QueryBuilder: React.FC<QueryBuilderProps> = ({ onEntitySelect }) =>
     const queryService = useQueryService();
 
     const handleEditorMount = (_editor: any, monacoInstance: any) => {
+        console.log('Editor mounted, registering completion providers...');
+        
+        // Register custom languages if not already registered
+        const languages = monacoInstance.languages.getLanguages();
+        
+        if (!languages.some((lang: any) => lang.id === 'odata')) {
+            console.log('Registering odata language...');
+            monacoInstance.languages.register({ id: 'odata' });
+        }
+        
+        // Register completion providers
         registerCompletionProviders(monacoInstance, async (name: string | null) => {
+            console.log('Completion provider called with entity name:', name);
             const logical = resolveLogicalName(name);
             const attrs = logical ? await fetchEntityAttributes(logical) : [];
+            console.log('Returning metadata:', { attributeCount: attrs.length, entityCount: allEntitiesRef.current.length });
             return { attributes: attrs, entities: allEntitiesRef.current };
         });
+        
+        console.log('Completion providers registered successfully');
     };
 
     useEffect(() => {
         getAllEntities().then(list => {
+            console.log('Loaded entities:', list.length);
             allEntitiesRef.current = list;
         });
-    }, []);
+    }, [getAllEntities]);
 
     // Sample queries for each type (memoized to prevent re-creation on every render)
     const sampleQueries = useMemo(() => ({
@@ -135,15 +149,13 @@ WHERE statecode = 0`
     }, [queryType, query, sampleQueries]);
 
     useEffect(() => {
+        // This effect is now only for side effects, not for state
         const name = parseEntityName(query, queryType);
         const logical = resolveLogicalName(name);
-        setCurrentEntity(logical);
         if (logical) {
-            fetchEntityAttributes(logical).then(setAttributes);
-        } else {
-            setAttributes([]);
+            fetchEntityAttributes(logical);
         }
-    }, [query, queryType]);
+    }, [query, queryType, fetchEntityAttributes]);
 
     // Handle query type change with automatic conversion
     const handleQueryTypeChange = (newQueryType: QueryType) => {
@@ -218,7 +230,7 @@ WHERE statecode = 0`
     const getEditorLanguage = (type: QueryType): string => {
         switch (type) {
             case 'odata':
-                return 'text';
+                return 'odata';
             case 'fetchxml':
                 return 'xml';
             case 'sql':
