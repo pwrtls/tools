@@ -69,6 +69,7 @@ export const QueryBuilder: React.FC<QueryBuilderProps> = ({ onEntitySelect }) =>
     const [loading, setLoading] = useState(false);
     const [result, setResult] = useState<IQueryResult | null>(null);
     const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
+    const [hasLoadedInitialSample, setHasLoadedInitialSample] = useState(false);
 
     const { fetchEntityAttributes, getAllEntities } = useMetadataService();
     const allEntitiesRef = React.useRef<any[]>([]);
@@ -179,13 +180,12 @@ FROM account
 WHERE statecode = 0`
     }), []);
 
-    // Load sample query when query type changes (only if query is empty)
+    // Load sample query when query type changes
     useEffect(() => {
-        if (!query.trim()) {
-            setQuery(sampleQueries[queryType]);
-            setResult(null);
-        }
-    }, [queryType, query, sampleQueries]);
+        setQuery(sampleQueries[queryType]);
+        setResult(null);
+        setHasLoadedInitialSample(true);
+    }, [queryType, sampleQueries]);
 
     useEffect(() => {
         // This effect is now only for side effects, not for state
