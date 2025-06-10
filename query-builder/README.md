@@ -30,6 +30,8 @@ A comprehensive query building tool for Microsoft Dynamics 365 / Power Platform 
 ### Developer Features
 - Monaco Editor with syntax highlighting
 - Intellisense/typeahead support
+- Intellisense provides table and column suggestions while typing. Begin
+  writing a query and available entities or attributes will appear automatically.
 - Sample query templates
 - Query history (future)
 

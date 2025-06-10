@@ -11,7 +11,6 @@ export function usePowerToolsApi() {
             throw new Error('PowerTools API is not available - get method missing');
         }
         
-        console.log('Making API GET request:', url, params?.toString());
         try {
             return await get(url, params, headers);
         } catch (error) {
@@ -26,7 +25,6 @@ export function usePowerToolsApi() {
             throw new Error('PowerTools API is not available - get method missing');
         }
         
-        console.log('Making API GET request for JSON:', url, params?.toString());
         try {
             const response = await get(url, params, headers);
             const result = await response.asJson();
@@ -43,7 +41,6 @@ export function usePowerToolsApi() {
             throw new Error('PowerTools API is not available - post method missing');
         }
         
-        console.log('Making API POST request:', url);
         try {
             return await post(url, body, headers);
         } catch (error) {
@@ -58,7 +55,6 @@ export function usePowerToolsApi() {
             throw new Error('PowerTools API is not available - download method missing');
         }
         
-        console.log('Downloading file:', fileName);
         try {
             return await download(content, fileName, mimeType);
         } catch (error) {

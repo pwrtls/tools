@@ -15,9 +15,7 @@ export const useMetadataService = () => {
     const fetchAllEntities = async (): Promise<IEntityMetadata[]> => {
         try {
             const query = new URLSearchParams();
-            query.set('$select', 'LogicalName,EntitySetName,MetadataId,DisplayName,SchemaName,PrimaryIdAttribute,PrimaryNameAttribute,IsCustomEntity,OwnershipType');
-            query.set('$filter', 'IsValidForAdvancedFind eq true and IsIntersect eq false');
-            query.set('$orderby', 'DisplayName/UserLocalizedLabel/Label');
+            query.set('$select', 'LogicalName,EntitySetName,MetadataId,DisplayName,SchemaName');
 
             const response = await getAsJson<IODataResponse<IEntityMetadata>>(
                 '/api/data/v9.2/EntityDefinitions',
@@ -78,14 +76,15 @@ export const useMetadataService = () => {
         try {
             // First get the entity metadata to get MetadataId
             const entity = await fetchEntityMetadata(entityLogicalName);
+            
             if (!entity) {
                 console.warn(`Entity ${entityLogicalName} not found`);
                 return [];
             }
 
             const query = new URLSearchParams();
-            query.set('$select', 'LogicalName,SchemaName,MetadataId,DisplayName,AttributeType,IsValidForRead,IsValidForCreate,IsValidForUpdate,RequiredLevel,IsPrimaryId,IsPrimaryName,MaxLength');
-            query.set('$filter', 'IsValidForAdvancedFind eq true');
+            query.set('$select', 'LogicalName,SchemaName,MetadataId,DisplayName,AttributeType,IsValidForRead,IsValidForCreate,IsValidForUpdate,RequiredLevel,IsPrimaryId,IsPrimaryName');
+            query.set('$filter', 'IsValidForAdvancedFind/Value eq true');
             query.set('$orderby', 'DisplayName/UserLocalizedLabel/Label');
 
             const response = await getAsJson<IODataResponse<IAttributeMetadata>>(
@@ -162,6 +161,11 @@ export const useMetadataService = () => {
         attributeCache.clear();
     };
 
+    // Expose all cached or fetched entities for intellisense
+    const getAllEntities = async (): Promise<IEntityMetadata[]> => {
+        return fetchAllEntities();
+    };
+
     return {
         fetchAllEntities,
         fetchEntityMetadata,
@@ -171,6 +175,7 @@ export const useMetadataService = () => {
         searchEntities,
         searchAttributes,
         getEntitySetName,
-        clearCache
+        clearCache,
+        getAllEntities
     };
-}; 
+};

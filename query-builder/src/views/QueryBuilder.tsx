@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
     Layout, 
     Card, 
@@ -12,22 +12,24 @@ import {
     Col,
     Statistic,
     App,
-    Tooltip
+    Switch,
+    Spin
 } from 'antd';
 import { 
     PlayCircleOutlined, 
     DatabaseOutlined, 
-    BugOutlined, 
     DownloadOutlined,
-    ClearOutlined,
     SwapOutlined
 } from '@ant-design/icons';
 import Editor from '@monaco-editor/react';
 import { useQueryService } from '../api/queryService';
-import { QueryType, IQueryResult, IQueryRequest } from '../models';
-import { QueryConverter } from '../utils/queryConverter';
+import { QueryType, IQueryResult, IQueryRequest, IODataResponse } from '../models';
+import { parseEntityName, registerCompletionProviders } from '../utils/intellisense';
+import { useMetadataService } from '../api/metadataService';
 import { Resizable } from 'react-resizable';
 import type { ResizeCallbackData } from 'react-resizable';
+import { convertToCsv } from '../utils/export';
+import { usePowerToolsApi } from '../powertools/apiHook';
 
 const { Content } = Layout;
 const { Title, Text } = Typography;
@@ -69,15 +71,144 @@ export const QueryBuilder: React.FC<QueryBuilderProps> = ({ onEntitySelect }) =>
     const [queryType, setQueryType] = useState<QueryType>('odata');
     const [query, setQuery] = useState<string>('');
     const [loading, setLoading] = useState(false);
+    const [loadingMore, setLoadingMore] = useState(false);
     const [result, setResult] = useState<IQueryResult | null>(null);
     const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
+    const [showEtagColumn, setShowEtagColumn] = useState(false);
+
+    const { fetchEntityAttributes, getAllEntities } = useMetadataService();
+    const { download, get } = usePowerToolsApi();
+    const allEntitiesRef = React.useRef<any[]>([]);
+    const previousEntityNameRef = React.useRef<string | null>(null);
+
+    const resolveLogicalName = (name: string | null): string | null => {
+        if (!name) return null;
+        
+        const match = allEntitiesRef.current.find(
+            e =>
+                e.LogicalName.toLowerCase() === name.toLowerCase() ||
+                e.EntitySetName.toLowerCase() === name.toLowerCase()
+        );
+        return match ? match.LogicalName : name;
+    };
     
     const queryService = useQueryService();
+    const executeQueryRef = React.useRef<(() => void) | undefined>(undefined);
+
+    const handleExecuteQuery = useCallback(async () => {
+        if (!query.trim()) {
+            message.warning('Please enter a query to execute');
+            return;
+        }
+
+        setLoading(true);
+        setResult(null); // Clear previous results
+        try {
+            const request: IQueryRequest = {
+                queryType,
+                query: query.trim()
+            };
+
+            const initialResult = await queryService.executeQuery(request);
+            setResult(initialResult);
+            setLoading(false);
+
+            if (initialResult.success && initialResult.nextLink) {
+                setLoadingMore(true);
+                let nextLink: string | undefined = initialResult.nextLink;
+                let currentData = initialResult.data || [];
+
+                while (nextLink) {
+                    let newPage: IODataResponse<any>;
+                    if (queryType === 'fetchxml') {
+                        // For FetchXML, nextLink is the actual query
+                        const request: IQueryRequest = {
+                            queryType,
+                            query: nextLink
+                        };
+                        const response = await queryService.executeQuery(request);
+                        newPage = {
+                            '@odata.context': '',
+                            value: response.data || [],
+                            '@odata.nextLink': response.nextLink
+                        };
+                    } else {
+                        // For OData, nextLink is a URL
+                        const url: URL = new URL(nextLink);
+                        const path: string = url.pathname + url.search;
+                        const proxyResponse = await get(path, undefined, { 'Prefer': 'odata.maxpagesize=5000' });
+                        newPage = await proxyResponse.asJson();
+                    }
+                    
+                    // Create a new array with the updated data
+                    const updatedData = [...currentData, ...newPage.value];
+                    
+                    // Update state with the new data
+                    setResult(prevResult => ({
+                        ...prevResult!,
+                        data: updatedData,
+                        nextLink: newPage['@odata.nextLink'],
+                        hasMore: !!newPage['@odata.nextLink']
+                    }));
+
+                    // Update local variables for next iteration
+                    currentData = updatedData;
+                    nextLink = newPage['@odata.nextLink'];
+                }
+                setLoadingMore(false);
+            }
+
+        } catch (error) {
+            console.error('Error executing query:', error);
+            message.error('Failed to execute query');
+            setResult({
+                success: false,
+                error: 'An unexpected error occurred while executing the query'
+            });
+            setLoading(false);
+            setLoadingMore(false);
+        }
+    }, [query, queryType, queryService, message, get]);
+    
+    useEffect(() => {
+        executeQueryRef.current = handleExecuteQuery;
+    }, [handleExecuteQuery]);
+
+    const handleEditorMount = (_editor: any, monacoInstance: any) => {
+        // Register custom languages if not already registered
+        const languages = monacoInstance.languages.getLanguages();
+        
+        if (!languages.some((lang: any) => lang.id === 'odata')) {
+            monacoInstance.languages.register({ id: 'odata' });
+        }
+        
+        // Register completion providers
+        registerCompletionProviders(monacoInstance, async (name: string | null) => {
+            const logical = resolveLogicalName(name);
+            const attrs = logical ? await fetchEntityAttributes(logical) : [];
+            return { attributes: attrs, entities: allEntitiesRef.current };
+        });
+        
+        _editor.addAction({
+            id: 'execute-query',
+            label: 'Execute Query',
+            keybindings: [
+                monacoInstance.KeyMod.CtrlCmd | monacoInstance.KeyCode.Enter,
+            ],
+            run: () => executeQueryRef.current?.(),
+        });
+    };
+
+    useEffect(() => {
+        getAllEntities().then(list => {
+            allEntitiesRef.current = list;
+        });
+    }, [getAllEntities]);
 
     // Sample queries for each type (memoized to prevent re-creation on every render)
     const sampleQueries = useMemo(() => ({
         odata: '/api/data/v9.2/accounts?$select=name,accountnumber,createdon&$top=10',
-        fetchxml: `<fetch version="1.0" output-format="xml-platform" mapping="logical" distinct="false">
+        fetchxml: `<fetch version="1.0" top="10" output-format="xml-platform" mapping="logical" distinct="false">
   <entity name="account">
     <attribute name="name" />
     <attribute name="accountnumber" />
@@ -96,93 +227,49 @@ FROM account
 WHERE statecode = 0`
     }), []);
 
-    // Load sample query when query type changes (only if query is empty)
+    // Load sample query when query type changes
     useEffect(() => {
-        if (!query.trim()) {
-            setQuery(sampleQueries[queryType]);
+        setQuery(sampleQueries[queryType]);
+        setResult(null);
+    }, [queryType, sampleQueries]);
+
+    useEffect(() => {
+        // This effect is for pre-fetching entity attributes for intellisense
+        const name = parseEntityName(query, queryType);
+        const logical = resolveLogicalName(name);
+        if (logical && logical !== previousEntityNameRef.current) {
+            fetchEntityAttributes(logical);
+            previousEntityNameRef.current = logical;
         }
-    }, [queryType, query, sampleQueries]);
+    }, [query, queryType, fetchEntityAttributes]);
 
     // Handle query type change with automatic conversion
     const handleQueryTypeChange = (newQueryType: QueryType) => {
         if (newQueryType === queryType) return;
 
-        // If there's a query to convert, attempt conversion
-        if (query.trim()) {
-            const conversionResult = QueryConverter.convert(query, queryType, newQueryType);
-            
-            if (conversionResult.success) {
-                setQuery(conversionResult.query);
-            } else {
-                // If conversion fails, show error and load sample instead
-                message.error(`Failed to convert query: ${conversionResult.error}`);
-                setQuery(sampleQueries[newQueryType]);
-            }
-        } else {
-            // No query to convert, just load the sample
-            setQuery(sampleQueries[newQueryType]);
-        }
-
+        // Load the sample query for the new type
+        setQuery(sampleQueries[newQueryType]);
         setQueryType(newQueryType);
         setResult(null); // Clear previous results
-    };
-
-    const handleExecuteQuery = async () => {
-        if (!query.trim()) {
-            message.warning('Please enter a query to execute');
-            return;
-        }
-
-        setLoading(true);
-        try {
-            const request: IQueryRequest = {
-                queryType,
-                query: query.trim(),
-                pageSize: 50
-            };
-
-            const queryResult = await queryService.executeQuery(request);
-            setResult(queryResult);
-            setColumnWidths({}); // Reset column widths for new query results
-
-            if (queryResult.success) {
-                // No message.success call after a successful query execution
-            } else {
-                message.error(`Query failed: ${queryResult.error}`);
-            }
-        } catch (error) {
-            console.error('Error executing query:', error);
-            message.error('Failed to execute query');
-            setResult({
-                success: false,
-                error: 'An unexpected error occurred while executing the query'
-            });
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleClearQuery = () => {
-        setQuery('');
-        setResult(null);
-        setColumnWidths({}); // Reset column widths
-    };
-
-    const handleLoadSample = () => {
-        setQuery(sampleQueries[queryType]);
-        setResult(null);
     };
 
     const getEditorLanguage = (type: QueryType): string => {
         switch (type) {
             case 'odata':
-                return 'text';
+                return 'odata';
             case 'fetchxml':
                 return 'xml';
             case 'sql':
                 return 'sql';
             default:
                 return 'text';
+        }
+    };
+
+    const handleExport = () => {
+        if (result && result.success && result.data) {
+            const csv = convertToCsv(result.data);
+            download(csv, 'query-results.csv', 'text/csv');
         }
     };
 
@@ -254,7 +341,13 @@ WHERE statecode = 0`
             );
         }
         
-        const columns = Object.keys(firstRecord).map(key => {
+        let columnKeys = Object.keys(firstRecord);
+
+        if (!showEtagColumn) {
+            columnKeys = columnKeys.filter(key => key !== '@odata.etag');
+        }
+
+        const columns = columnKeys.map(key => {
             const defaultWidth = 150;
             const width = columnWidths[key] || defaultWidth;
             
@@ -310,16 +403,13 @@ WHERE statecode = 0`
                 )}
                 
                 <Row gutter={16} style={{ marginBottom: 16 }}>
-                    <Col span={6}>
+                    <Col span={8}>
                         <Statistic title="Records Returned" value={result.data.length} />
                     </Col>
-                    <Col span={6}>
-                        <Statistic title="Total Count" value={result.totalCount || 'Unknown'} />
-                    </Col>
-                    <Col span={6}>
+                    <Col span={8}>
                         <Statistic title="Has More" value={result.hasMore ? 'Yes' : 'No'} />
                     </Col>
-                    <Col span={6}>
+                    <Col span={8}>
                         <Statistic title="Columns" value={columns.length} />
                     </Col>
                 </Row>
@@ -341,6 +431,26 @@ WHERE statecode = 0`
                     }}
                     scroll={{ x: true, y: 400 }}
                     size="small"
+                    footer={() => (
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <div>
+                                {result?.success && result.data && result.data[0]?.['@odata.etag'] && (
+                                    <Space>
+                                        <Switch size="small" checked={showEtagColumn} onChange={setShowEtagColumn} />
+                                        <Text>Show ETag</Text>
+                                    </Space>
+                                )}
+                            </div>
+                            <div>
+                                {loadingMore && (
+                                    <Space>
+                                        <Spin size="small" />
+                                        <Text type="secondary">Loading more results...</Text>
+                                    </Space>
+                                )}
+                            </div>
+                        </div>
+                    )}
                 />
             </div>
         );
@@ -349,37 +459,27 @@ WHERE statecode = 0`
     return (
         <Layout>
             <Content style={{ padding: '24px', minHeight: '100vh' }}>
-                <Title level={2}>
-                    <DatabaseOutlined /> Query Builder
-                </Title>
-                <Text type="secondary">
-                    Build and execute queries against Dynamics 365 / Power Platform using OData, FetchXML, or SQL syntax.
-                </Text>
-
-                <Row gutter={16} style={{ marginTop: 24 }}>
+                <Row gutter={16}>
                     <Col span={24}>
                         <Card
-                            title="Query Editor"
+                            title={
+                                <Space>
+                                    <DatabaseOutlined />
+                                    <Title level={4} style={{ margin: 0 }}>Query Builder</Title>
+                                </Space>
+                            }
                             extra={
                                 <Space>
-                                    <Tooltip title="Automatically converts queries between formats">
-                                        <Select
-                                            value={queryType}
-                                            onChange={handleQueryTypeChange}
-                                            style={{ width: 120 }}
-                                            suffixIcon={<SwapOutlined />}
-                                        >
-                                            <Select.Option value="odata">OData</Select.Option>
-                                            <Select.Option value="fetchxml">FetchXML</Select.Option>
-                                            <Select.Option value="sql">SQL</Select.Option>
-                                        </Select>
-                                    </Tooltip>
-                                    <Button onClick={handleLoadSample} icon={<BugOutlined />}>
-                                        Load Sample
-                                    </Button>
-                                    <Button onClick={handleClearQuery} icon={<ClearOutlined />}>
-                                        Clear
-                                    </Button>
+                                    <Select
+                                        value={queryType}
+                                        onChange={handleQueryTypeChange}
+                                        style={{ width: 120 }}
+                                        suffixIcon={<SwapOutlined />}
+                                    >
+                                        <Select.Option value="odata">OData</Select.Option>
+                                        <Select.Option value="fetchxml">FetchXML</Select.Option>
+                                        <Select.Option value="sql">SQL</Select.Option>
+                                    </Select>
                                     <Button 
                                         type="primary" 
                                         onClick={handleExecuteQuery}
@@ -397,6 +497,7 @@ WHERE statecode = 0`
                                     language={getEditorLanguage(queryType)}
                                     value={query}
                                     onChange={(value) => setQuery(value || '')}
+                                    onMount={handleEditorMount}
                                     theme="vs-light"
                                     options={{
                                         minimap: { enabled: false },
@@ -419,11 +520,13 @@ WHERE statecode = 0`
                             title="Query Results" 
                             loading={loading}
                             extra={
-                                result?.success && result.data && (
-                                    <Button icon={<DownloadOutlined />}>
-                                        Export Results
-                                    </Button>
-                                )
+                                <Space>
+                                    {result?.success && result.data && (
+                                        <Button icon={<DownloadOutlined />} onClick={handleExport}>
+                                            Export Results
+                                        </Button>
+                                    )}
+                                </Space>
                             }
                         >
                             {renderQueryResults()}

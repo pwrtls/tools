@@ -87,7 +87,7 @@ export const useQueryService = () => {
                         `/api/data/v9.2/${entitySetName}`,
                         params,
                         {
-                            'Prefer': 'odata.include-annotations="*"',
+                            'Prefer': 'odata.include-annotations="*",odata.maxpagesize=5000'
                         }
                     );
                     
@@ -98,11 +98,22 @@ export const useQueryService = () => {
     
                     const odataResponse = JSON.parse(proxyResponse.content || '{}');
                     
+                    // For FetchXML, we need to parse the next page from the query
+                    let nextPage: string | undefined = undefined;
+                    const pageMatch = /page="(\d+)"/.exec(query);
+                    const currentPage = pageMatch ? parseInt(pageMatch[1], 10) : 1;
+                    
+                    // Create next page query if we have results
+                    if (odataResponse.value && odataResponse.value.length > 0) {
+                        const nextPageQuery = query.replace(/page="\d+"/, `page="${currentPage + 1}"`);
+                        nextPage = nextPageQuery;
+                    }
+                    
                     return {
                         success: true,
                         data: odataResponse.value,
-                        totalCount: odataResponse['@odata.count'],
-                        hasMore: !!odataResponse['@odata.nextLink'],
+                        hasMore: !!nextPage,
+                        nextLink: nextPage,
                     };
                 } catch (error: any) {
                     console.error('Error executing FetchXML query:', error);
@@ -118,7 +129,17 @@ export const useQueryService = () => {
                 const path = odataQuery.startsWith('/') ? odataQuery : `/${odataQuery}`;
                 const url = path.startsWith('/api/data') ? path : `/api/data/v9.2${path}`;
 
-                const proxyResponse = await get(url);
+                // Add $count=true if not already present
+                const hasCount = url.includes('$count=true');
+                const finalUrl = hasCount ? url : `${url}${url.includes('?') ? '&' : '?'}$count=true`;
+
+                const proxyResponse = await get(
+                    finalUrl, 
+                    undefined,
+                    {
+                        'Prefer': 'odata.maxpagesize=5000,odata.count=true'
+                    }
+                );
 
                 if (proxyResponse.statusCode >= 400) {
                     const errorResponse = JSON.parse(proxyResponse.content || '{}');
@@ -130,8 +151,8 @@ export const useQueryService = () => {
                 return {
                     success: true,
                     data: odataResponse.value,
-                    totalCount: odataResponse['@odata.count'],
                     hasMore: !!odataResponse['@odata.nextLink'],
+                    nextLink: odataResponse['@odata.nextLink'],
                     warnings: conversionResult.warnings,
                 };
             }
