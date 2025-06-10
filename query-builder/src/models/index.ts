@@ -79,6 +79,7 @@ export interface IQueryResult {
     errorDetails?: any;
     totalCount?: number;
     hasMore?: boolean;
+    nextLink?: string;
     warnings?: string[];
 }
 

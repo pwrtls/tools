@@ -12,7 +12,8 @@ import {
     Col,
     Statistic,
     App,
-    Switch
+    Switch,
+    Spin
 } from 'antd';
 import { 
     PlayCircleOutlined, 
@@ -70,12 +71,13 @@ export const QueryBuilder: React.FC<QueryBuilderProps> = ({ onEntitySelect }) =>
     const [queryType, setQueryType] = useState<QueryType>('odata');
     const [query, setQuery] = useState<string>('');
     const [loading, setLoading] = useState(false);
+    const [loadingMore, setLoadingMore] = useState(false);
     const [result, setResult] = useState<IQueryResult | null>(null);
     const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
     const [showEtagColumn, setShowEtagColumn] = useState(false);
 
     const { fetchEntityAttributes, getAllEntities } = useMetadataService();
-    const { download } = usePowerToolsApi();
+    const { download, get } = usePowerToolsApi();
     const allEntitiesRef = React.useRef<any[]>([]);
     const previousEntityNameRef = React.useRef<string | null>(null);
 
@@ -100,22 +102,54 @@ export const QueryBuilder: React.FC<QueryBuilderProps> = ({ onEntitySelect }) =>
         }
 
         setLoading(true);
+        setResult(null); // Clear previous results
         try {
             const request: IQueryRequest = {
                 queryType,
-                query: query.trim(),
-                pageSize: 50
+                query: query.trim()
             };
 
-            const queryResult = await queryService.executeQuery(request);
-            setResult(queryResult);
-            setColumnWidths({}); // Reset column widths for new query results
+            const initialResult = await queryService.executeQuery(request);
+            console.log('Initial query result:', initialResult); // Log the initial result
+            setResult(initialResult);
+            setLoading(false);
 
-            if (queryResult.success) {
-                // No message.success call after a successful query execution
-            } else {
-                message.error(`Query failed: ${queryResult.error}`);
+            if (initialResult.success && initialResult.nextLink) {
+                setLoadingMore(true);
+                let nextLink: string | undefined = initialResult.nextLink;
+                let currentData = initialResult.data || [];
+                const initialTotalCount = initialResult.totalCount; // Store the initial total count
+                console.log('Initial totalCount:', initialTotalCount);
+
+                while (nextLink) {
+                    const url: URL = new URL(nextLink);
+                    const path: string = url.pathname + url.search;
+                    const proxyResponse = await get(path, undefined, { 'Prefer': 'odata.maxpagesize=5000' });
+                    const newPage = await proxyResponse.asJson();
+                    console.log('Fetched new page:', newPage);
+                    
+                    // Create a new array with the updated data
+                    const updatedData = [...currentData, ...newPage.value];
+                    
+                    // Update state with the new data, preserving the initial total count
+                    setResult(prevResult => {
+                        console.log('Setting totalCount in setResult:', initialTotalCount);
+                        return {
+                            ...prevResult!,
+                            data: updatedData,
+                            nextLink: newPage['@odata.nextLink'],
+                            hasMore: !!newPage['@odata.nextLink'],
+                            totalCount: initialTotalCount // Use the initial total count
+                        };
+                    });
+
+                    // Update local variables for next iteration
+                    currentData = updatedData;
+                    nextLink = newPage['@odata.nextLink'];
+                }
+                setLoadingMore(false);
             }
+
         } catch (error) {
             console.error('Error executing query:', error);
             message.error('Failed to execute query');
@@ -123,10 +157,10 @@ export const QueryBuilder: React.FC<QueryBuilderProps> = ({ onEntitySelect }) =>
                 success: false,
                 error: 'An unexpected error occurred while executing the query'
             });
-        } finally {
             setLoading(false);
+            setLoadingMore(false);
         }
-    }, [query, queryType, queryService, message]);
+    }, [query, queryType, queryService, message, get]);
     
     useEffect(() => {
         executeQueryRef.current = handleExecuteQuery;
@@ -221,6 +255,13 @@ WHERE statecode = 0`
                 return 'sql';
             default:
                 return 'text';
+        }
+    };
+
+    const handleExport = () => {
+        if (result && result.success && result.data) {
+            const csv = convertToCsv(result.data);
+            download(csv, 'query-results.csv', 'text/csv');
         }
     };
 
@@ -354,16 +395,13 @@ WHERE statecode = 0`
                 )}
                 
                 <Row gutter={16} style={{ marginBottom: 16 }}>
-                    <Col span={6}>
+                    <Col span={8}>
                         <Statistic title="Records Returned" value={result.data.length} />
                     </Col>
-                    <Col span={6}>
-                        <Statistic title="Total Count" value={result.totalCount || 'Unknown'} />
-                    </Col>
-                    <Col span={6}>
+                    <Col span={8}>
                         <Statistic title="Has More" value={result.hasMore ? 'Yes' : 'No'} />
                     </Col>
-                    <Col span={6}>
+                    <Col span={8}>
                         <Statistic title="Columns" value={columns.length} />
                     </Col>
                 </Row>
@@ -386,23 +424,28 @@ WHERE statecode = 0`
                     scroll={{ x: true, y: 400 }}
                     size="small"
                     footer={() => (
-                        result?.success && result.data && result.data[0]?.['@odata.etag'] && (
-                            <Space>
-                                <Switch size="small" checked={showEtagColumn} onChange={setShowEtagColumn} />
-                                <Text>Show ETag</Text>
-                            </Space>
-                        )
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <div>
+                                {result?.success && result.data && result.data[0]?.['@odata.etag'] && (
+                                    <Space>
+                                        <Switch size="small" checked={showEtagColumn} onChange={setShowEtagColumn} />
+                                        <Text>Show ETag</Text>
+                                    </Space>
+                                )}
+                            </div>
+                            <div>
+                                {loadingMore && (
+                                    <Space>
+                                        <Spin size="small" />
+                                        <Text type="secondary">Loading more results...</Text>
+                                    </Space>
+                                )}
+                            </div>
+                        </div>
                     )}
                 />
             </div>
         );
-    };
-
-    const handleExport = () => {
-        if (result && result.success && result.data) {
-            const csv = convertToCsv(result.data);
-            download(csv, 'query-results.csv', 'text/csv');
-        }
     };
 
     return (

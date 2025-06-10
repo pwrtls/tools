@@ -82,12 +82,13 @@ export const useQueryService = () => {
                     // Execute FetchXML directly using GET request to the entity set endpoint
                     const params = new URLSearchParams();
                     params.set('fetchXml', query); // URLSearchParams handles encoding
+                    params.set('$count', 'true'); // Add count parameter
 
                     const proxyResponse = await get(
                         `/api/data/v9.2/${entitySetName}`,
                         params,
                         {
-                            'Prefer': 'odata.include-annotations="*"',
+                            'Prefer': 'odata.include-annotations="*",odata.maxpagesize=5000,odata.count=true'
                         }
                     );
                     
@@ -101,8 +102,8 @@ export const useQueryService = () => {
                     return {
                         success: true,
                         data: odataResponse.value,
-                        totalCount: odataResponse['@odata.count'],
                         hasMore: !!odataResponse['@odata.nextLink'],
+                        nextLink: odataResponse['@odata.nextLink'],
                     };
                 } catch (error: any) {
                     console.error('Error executing FetchXML query:', error);
@@ -118,7 +119,17 @@ export const useQueryService = () => {
                 const path = odataQuery.startsWith('/') ? odataQuery : `/${odataQuery}`;
                 const url = path.startsWith('/api/data') ? path : `/api/data/v9.2${path}`;
 
-                const proxyResponse = await get(url);
+                // Add $count=true if not already present
+                const hasCount = url.includes('$count=true');
+                const finalUrl = hasCount ? url : `${url}${url.includes('?') ? '&' : '?'}$count=true`;
+
+                const proxyResponse = await get(
+                    finalUrl, 
+                    undefined,
+                    {
+                        'Prefer': 'odata.maxpagesize=5000,odata.count=true'
+                    }
+                );
 
                 if (proxyResponse.statusCode >= 400) {
                     const errorResponse = JSON.parse(proxyResponse.content || '{}');
@@ -130,8 +141,8 @@ export const useQueryService = () => {
                 return {
                     success: true,
                     data: odataResponse.value,
-                    totalCount: odataResponse['@odata.count'],
                     hasMore: !!odataResponse['@odata.nextLink'],
+                    nextLink: odataResponse['@odata.nextLink'],
                     warnings: conversionResult.warnings,
                 };
             }
