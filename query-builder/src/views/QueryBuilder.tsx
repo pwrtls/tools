@@ -127,13 +127,10 @@ export const QueryBuilder: React.FC<QueryBuilderProps> = ({ onEntitySelect }) =>
     }, [handleExecuteQuery]);
 
     const handleEditorMount = (_editor: any, monacoInstance: any) => {
-        console.log('Editor mounted, registering completion providers...');
-        
         // Register custom languages if not already registered
         const languages = monacoInstance.languages.getLanguages();
         
         if (!languages.some((lang: any) => lang.id === 'odata')) {
-            console.log('Registering odata language...');
             monacoInstance.languages.register({ id: 'odata' });
         }
         
@@ -144,8 +141,6 @@ export const QueryBuilder: React.FC<QueryBuilderProps> = ({ onEntitySelect }) =>
             return { attributes: attrs, entities: allEntitiesRef.current };
         });
         
-        console.log('Completion providers registered successfully');
-
         _editor.addAction({
             id: 'execute-query',
             label: 'Execute Query',
@@ -158,7 +153,6 @@ export const QueryBuilder: React.FC<QueryBuilderProps> = ({ onEntitySelect }) =>
 
     useEffect(() => {
         getAllEntities().then(list => {
-            console.log('Loaded entities:', list.length);
             allEntitiesRef.current = list;
         });
     }, [getAllEntities]);
