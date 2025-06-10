@@ -72,6 +72,7 @@ export const QueryBuilder: React.FC<QueryBuilderProps> = ({ onEntitySelect }) =>
 
     const { fetchEntityAttributes, getAllEntities } = useMetadataService();
     const allEntitiesRef = React.useRef<any[]>([]);
+    const previousEntityNameRef = React.useRef<string | null>(null);
 
     const resolveLogicalName = (name: string | null): string | null => {
         if (!name) return null;
@@ -186,11 +187,12 @@ WHERE statecode = 0`
     }, [queryType, sampleQueries]);
 
     useEffect(() => {
-        // This effect is now only for side effects, not for state
+        // This effect is for pre-fetching entity attributes for intellisense
         const name = parseEntityName(query, queryType);
         const logical = resolveLogicalName(name);
-        if (logical) {
+        if (logical && logical !== previousEntityNameRef.current) {
             fetchEntityAttributes(logical);
+            previousEntityNameRef.current = logical;
         }
     }, [query, queryType, fetchEntityAttributes]);
 
