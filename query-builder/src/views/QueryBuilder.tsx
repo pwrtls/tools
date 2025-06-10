@@ -216,17 +216,6 @@ WHERE statecode = 0`
         }
     };
 
-    const handleClearQuery = () => {
-        setQuery('');
-        setResult(null);
-        setColumnWidths({}); // Reset column widths
-    };
-
-    const handleLoadSample = () => {
-        setQuery(sampleQueries[queryType]);
-        setResult(null);
-    };
-
     const getEditorLanguage = (type: QueryType): string => {
         switch (type) {
             case 'odata':
@@ -426,12 +415,6 @@ WHERE statecode = 0`
                                             <Select.Option value="sql">SQL</Select.Option>
                                         </Select>
                                     </Tooltip>
-                                    <Button onClick={handleLoadSample} icon={<BugOutlined />}>
-                                        Load Sample
-                                    </Button>
-                                    <Button onClick={handleClearQuery} icon={<ClearOutlined />}>
-                                        Clear
-                                    </Button>
                                     <Button 
                                         type="primary" 
                                         onClick={handleExecuteQuery}
