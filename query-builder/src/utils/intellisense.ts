@@ -5,9 +5,14 @@ export const parseEntityName = (query: string, type: QueryType): string | null =
 
     switch (type) {
         case 'sql': {
-            const match = /from\s+([a-zA-Z0-9_]+)/i.exec(query);
+            // Look for FROM clause with entity name
+            const match = /\bfrom\s+([a-zA-Z0-9_]+)/i.exec(query);
             if (match) {
-                return match[1];
+                const entityName = match[1];
+                // Only return entity name if it looks complete (more than 2 characters)
+                if (entityName.length >= 3) {
+                    return entityName;
+                }
             }
             return null;
         }
@@ -67,10 +72,14 @@ export function registerCompletionProviders(
     monaco: any,
     metadataProvider: (entityName: string | null) => Promise<{ attributes: IAttributeMetadata[], entities: IEntityMetadata[] }>
 ): void {
-    console.log('Registering completion providers...');
+    console.log('🚀 Starting completion provider registration...');
+    
+    // Check existing providers
+    const existingProviders = monaco.languages.getLanguages();
+    console.log('📋 Existing Monaco languages:', existingProviders.map((l: any) => l.id));
     
     const createProvider = (languageId: string, queryType: QueryType) => ({
-        triggerCharacters: ['/', '?', '=', '$', '<', '"', "'", ' '],
+        triggerCharacters: ['/', '?', '=', '$', '<', '"', "'", ' ', ','],
         
         provideCompletionItems: async (model: any, position: any) => {
             console.log(`🔍 COMPLETION PROVIDER CALLED: ${languageId} (queryType: ${queryType}) at position:`, position);
@@ -81,10 +90,11 @@ export function registerCompletionProviders(
                 endLineNumber: position.lineNumber,
                 endColumn: position.column,
             });
-            
+            const fullQueryText = model.getValue();
+
             console.log(`📝 Text until position for ${languageId}:`, textUntilPosition);
             
-            const entityName = parseEntityName(textUntilPosition, queryType);
+            const entityName = parseEntityName(fullQueryText, queryType);
             console.log(`🏷️ Parsed entity name for ${languageId}:`, entityName);
             
             try {
@@ -101,8 +111,10 @@ export function registerCompletionProviders(
                     console.log(`✅ FetchXML completions returned:`, result.suggestions.length);
                     return result;
                 } else if (queryType === 'sql') {
-                    console.log(`🔥 SQL completion provider called - returning empty suggestions`);
-                    return { suggestions: [] };
+                    console.log(`🔥 CALLING SQL COMPLETIONS`);
+                    const result = await provideSqlCompletions(fullQueryText, textUntilPosition, metadata, position);
+                    console.log(`✅ SQL completions returned:`, result.suggestions.length);
+                    return result;
                 }
                 
                 console.log(`❌ No matching queryType for ${languageId}, returning empty suggestions`);
@@ -115,12 +127,6 @@ export function registerCompletionProviders(
     });
 
     // Register completion providers for each language
-    console.log('🚀 Starting completion provider registration...');
-    
-    // Check existing providers
-    const existingProviders = monaco.languages.getLanguages();
-    console.log('📋 Existing Monaco languages:', existingProviders.map((l: any) => l.id));
-    
     console.log('📝 Registering SQL completion provider...');
     const sqlProvider = monaco.languages.registerCompletionItemProvider('sql', createProvider('sql', 'sql'));
     console.log('✅ SQL provider registered:', sqlProvider);
@@ -280,5 +286,121 @@ async function provideFetchXmlCompletions(
     }
     
     console.log(`✅ Returning ${suggestions.length} FetchXML suggestions`);
+    return { suggestions };
+}
+
+async function provideSqlCompletions(
+    fullQueryText: string,
+    textUntilPosition: string,
+    metadata: { attributes: IAttributeMetadata[], entities: IEntityMetadata[] },
+    position: any
+): Promise<{ suggestions: any[] }> {
+    const suggestions: any[] = [];
+    
+    // Get the current line and full text for context
+    const lines = textUntilPosition.split('\n');
+    const currentLine = lines[lines.length - 1];
+    const fullText = fullQueryText.toLowerCase();
+    
+    console.log('🔍 Analyzing SQL line:', JSON.stringify(currentLine));
+    console.log('🔍 Full SQL text:', JSON.stringify(fullQueryText));
+    
+    // Check if we're right after "FROM " (with space) - suggest entities
+    const afterFromPattern = /\bfrom\s+$/i;
+    const afterFromMatch = afterFromPattern.test(currentLine);
+    
+    // Check if there's a FROM clause anywhere in the full text
+    const fromEntityMatch = /\bfrom\s+([a-zA-Z0-9_]+)/i.exec(fullText);
+    const hasFromClause = fromEntityMatch !== null;
+    const entityName = hasFromClause ? fromEntityMatch[1] : null;
+    
+    // Check if we're in a SELECT context (anywhere before a FROM clause or with known FROM entity)
+    const hasSelectClause = /\bselect\b/i.test(fullText);
+    const beforeFromInSelect = hasSelectClause && (textUntilPosition.toLowerCase().indexOf('from') === -1 || 
+        (hasFromClause && textUntilPosition.toLowerCase().indexOf(fromEntityMatch[0]) > textUntilPosition.toLowerCase().indexOf('select')));
+    
+    // Check if we're typing a partial word (like "nam" for "name")
+    const partialWordMatch = currentLine.match(/\b([a-zA-Z_][a-zA-Z0-9_]*)$/);
+    const typingPartialWord = partialWordMatch !== null;
+    const partialWord = typingPartialWord ? partialWordMatch[1] : '';
+    
+    console.log('🔍 SQL context detection:', {
+        afterFromMatch,
+        hasFromClause,
+        entityName,
+        hasSelectClause,
+        beforeFromInSelect,
+        typingPartialWord,
+        partialWord,
+        hasAttributes: metadata.attributes.length
+    });
+    
+    if (afterFromMatch) {
+        // User just typed "FROM " - suggest entities
+        console.log('🏢 ✅ AFTER FROM: Suggesting entities');
+        metadata.entities.forEach(entity => {
+            suggestions.push({
+                label: entity.LogicalName,
+                kind: 7, // CompletionItemKind.Class
+                insertText: entity.LogicalName,
+                detail: entity.DisplayName?.UserLocalizedLabel?.Label || entity.LogicalName
+            });
+        });
+    } else if (hasFromClause && metadata.attributes.length > 0) {
+        // We have a FROM clause with entity - suggest attributes
+        console.log('🏷️ ✅ HAS ENTITY: Suggesting attributes for', entityName);
+        
+        let attributesToSuggest = metadata.attributes;
+        
+        // If user is typing a partial word, filter attributes that start with that word
+        if (typingPartialWord && partialWord.length > 0) {
+            console.log('🔍 Filtering attributes that start with:', partialWord);
+            attributesToSuggest = metadata.attributes.filter(attr => 
+                attr.LogicalName.toLowerCase().startsWith(partialWord.toLowerCase())
+            );
+        }
+        
+        attributesToSuggest.forEach(attr => {
+            suggestions.push({
+                label: attr.LogicalName,
+                kind: 5, // CompletionItemKind.Field
+                insertText: attr.LogicalName,
+                detail: attr.AttributeType,
+                // If replacing partial word, specify the range to replace
+                ...(typingPartialWord && partialWord.length > 0 ? {
+                    range: {
+                        startLineNumber: position.lineNumber,
+                        endLineNumber: position.lineNumber,
+                        startColumn: position.column - partialWord.length,
+                        endColumn: position.column
+                    }
+                } : {})
+            });
+        });
+    } else if (hasSelectClause) {
+        // We're in a SELECT context but no entity yet - suggest entities  
+        console.log('🌐 IN SELECT: Suggesting entities');
+        metadata.entities.slice(0, 50).forEach(entity => {
+            suggestions.push({
+                label: entity.LogicalName,
+                kind: 7, // CompletionItemKind.Class
+                insertText: entity.LogicalName,
+                detail: entity.DisplayName?.UserLocalizedLabel?.Label || entity.LogicalName
+            });
+        });
+    } else {
+        // Fallback: suggest entities
+        console.log('🌐 FALLBACK: Suggesting entities');
+        metadata.entities.slice(0, 50).forEach(entity => {
+            suggestions.push({
+                label: entity.LogicalName,
+                kind: 7, // CompletionItemKind.Class
+                insertText: entity.LogicalName,
+                detail: entity.DisplayName?.UserLocalizedLabel?.Label || entity.LogicalName
+            });
+        });
+    }
+    
+    console.log(`✅ Returning ${suggestions.length} SQL suggestions`);
     return { suggestions };
 }
