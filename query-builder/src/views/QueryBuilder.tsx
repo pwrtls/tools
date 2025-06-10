@@ -69,7 +69,6 @@ export const QueryBuilder: React.FC<QueryBuilderProps> = ({ onEntitySelect }) =>
     const [loading, setLoading] = useState(false);
     const [result, setResult] = useState<IQueryResult | null>(null);
     const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
-    const [hasLoadedInitialSample, setHasLoadedInitialSample] = useState(false);
 
     const { fetchEntityAttributes, getAllEntities } = useMetadataService();
     const allEntitiesRef = React.useRef<any[]>([]);
@@ -184,7 +183,6 @@ WHERE statecode = 0`
     useEffect(() => {
         setQuery(sampleQueries[queryType]);
         setResult(null);
-        setHasLoadedInitialSample(true);
     }, [queryType, sampleQueries]);
 
     useEffect(() => {
