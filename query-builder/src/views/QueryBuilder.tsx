@@ -84,6 +84,46 @@ export const QueryBuilder: React.FC<QueryBuilderProps> = ({ onEntitySelect }) =>
     };
     
     const queryService = useQueryService();
+    const executeQueryRef = React.useRef<(() => void) | undefined>(undefined);
+
+    const handleExecuteQuery = async () => {
+        if (!query.trim()) {
+            message.warning('Please enter a query to execute');
+            return;
+        }
+
+        setLoading(true);
+        try {
+            const request: IQueryRequest = {
+                queryType,
+                query: query.trim(),
+                pageSize: 50
+            };
+
+            const queryResult = await queryService.executeQuery(request);
+            setResult(queryResult);
+            setColumnWidths({}); // Reset column widths for new query results
+
+            if (queryResult.success) {
+                // No message.success call after a successful query execution
+            } else {
+                message.error(`Query failed: ${queryResult.error}`);
+            }
+        } catch (error) {
+            console.error('Error executing query:', error);
+            message.error('Failed to execute query');
+            setResult({
+                success: false,
+                error: 'An unexpected error occurred while executing the query'
+            });
+        } finally {
+            setLoading(false);
+        }
+    };
+    
+    useEffect(() => {
+        executeQueryRef.current = handleExecuteQuery;
+    });
 
     const handleEditorMount = (_editor: any, monacoInstance: any) => {
         console.log('Editor mounted, registering completion providers...');
@@ -106,6 +146,15 @@ export const QueryBuilder: React.FC<QueryBuilderProps> = ({ onEntitySelect }) =>
         });
         
         console.log('Completion providers registered successfully');
+
+        _editor.addAction({
+            id: 'execute-query',
+            label: 'Execute Query',
+            keybindings: [
+                monacoInstance.KeyMod.CtrlCmd | monacoInstance.KeyCode.Enter,
+            ],
+            run: () => executeQueryRef.current?.(),
+        });
     };
 
     useEffect(() => {
@@ -161,41 +210,6 @@ WHERE statecode = 0`
         setQuery(sampleQueries[newQueryType]);
         setQueryType(newQueryType);
         setResult(null); // Clear previous results
-    };
-
-    const handleExecuteQuery = async () => {
-        if (!query.trim()) {
-            message.warning('Please enter a query to execute');
-            return;
-        }
-
-        setLoading(true);
-        try {
-            const request: IQueryRequest = {
-                queryType,
-                query: query.trim(),
-                pageSize: 50
-            };
-
-            const queryResult = await queryService.executeQuery(request);
-            setResult(queryResult);
-            setColumnWidths({}); // Reset column widths for new query results
-
-            if (queryResult.success) {
-                // No message.success call after a successful query execution
-            } else {
-                message.error(`Query failed: ${queryResult.error}`);
-            }
-        } catch (error) {
-            console.error('Error executing query:', error);
-            message.error('Failed to execute query');
-            setResult({
-                success: false,
-                error: 'An unexpected error occurred while executing the query'
-            });
-        } finally {
-            setLoading(false);
-        }
     };
 
     const getEditorLanguage = (type: QueryType): string => {
