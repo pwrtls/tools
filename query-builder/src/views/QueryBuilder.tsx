@@ -403,17 +403,15 @@ WHERE statecode = 0`
     return (
         <Layout>
             <Content style={{ padding: '24px', minHeight: '100vh' }}>
-                <Title level={2}>
-                    <DatabaseOutlined /> Query Builder
-                </Title>
-                <Text type="secondary">
-                    Build and execute queries against Dynamics 365 / Power Platform using OData, FetchXML, or SQL syntax.
-                </Text>
-
-                <Row gutter={16} style={{ marginTop: 24 }}>
+                <Row gutter={16}>
                     <Col span={24}>
                         <Card
-                            title="Query Editor"
+                            title={
+                                <Space>
+                                    <DatabaseOutlined />
+                                    <Title level={4} style={{ margin: 0 }}>Query Builder</Title>
+                                </Space>
+                            }
                             extra={
                                 <Space>
                                     <Tooltip title="Automatically converts queries between formats">
