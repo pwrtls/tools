@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
     Layout, 
     Card, 
@@ -86,7 +86,7 @@ export const QueryBuilder: React.FC<QueryBuilderProps> = ({ onEntitySelect }) =>
     const queryService = useQueryService();
     const executeQueryRef = React.useRef<(() => void) | undefined>(undefined);
 
-    const handleExecuteQuery = async () => {
+    const handleExecuteQuery = useCallback(async () => {
         if (!query.trim()) {
             message.warning('Please enter a query to execute');
             return;
@@ -119,11 +119,11 @@ export const QueryBuilder: React.FC<QueryBuilderProps> = ({ onEntitySelect }) =>
         } finally {
             setLoading(false);
         }
-    };
+    }, [query, queryType, queryService, message]);
     
     useEffect(() => {
         executeQueryRef.current = handleExecuteQuery;
-    });
+    }, [handleExecuteQuery]);
 
     const handleEditorMount = (_editor: any, monacoInstance: any) => {
         console.log('Editor mounted, registering completion providers...');
