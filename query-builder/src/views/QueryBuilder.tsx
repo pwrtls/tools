@@ -26,6 +26,8 @@ import Editor from '@monaco-editor/react';
 import { useQueryService } from '../api/queryService';
 import { QueryType, IQueryResult, IQueryRequest } from '../models';
 import { QueryConverter } from '../utils/queryConverter';
+import { parseEntityName, registerCompletionProviders } from '../utils/intellisense';
+import { useMetadataService } from '../api/metadataService';
 import { Resizable } from 'react-resizable';
 import type { ResizeCallbackData } from 'react-resizable';
 
@@ -71,8 +73,26 @@ export const QueryBuilder: React.FC<QueryBuilderProps> = ({ onEntitySelect }) =>
     const [loading, setLoading] = useState(false);
     const [result, setResult] = useState<IQueryResult | null>(null);
     const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
+    const [currentEntity, setCurrentEntity] = useState<string | null>(null);
+    const [attributes, setAttributes] = useState<any[]>([]);
+
+    const { fetchEntityAttributes, getAllEntities } = useMetadataService();
+    const allEntitiesRef = React.useRef<any[]>([]);
     
     const queryService = useQueryService();
+
+    const handleEditorMount = (_editor: any, monacoInstance: any) => {
+        registerCompletionProviders(monacoInstance, async (name: string | null) => {
+            const attrs = name ? await fetchEntityAttributes(name) : [];
+            return { attributes: attrs, entities: allEntitiesRef.current };
+        });
+    };
+
+    useEffect(() => {
+        getAllEntities().then(list => {
+            allEntitiesRef.current = list;
+        });
+    }, [getAllEntities]);
 
     // Sample queries for each type (memoized to prevent re-creation on every render)
     const sampleQueries = useMemo(() => ({
@@ -102,6 +122,16 @@ WHERE statecode = 0`
             setQuery(sampleQueries[queryType]);
         }
     }, [queryType, query, sampleQueries]);
+
+    useEffect(() => {
+        const name = parseEntityName(query, queryType);
+        setCurrentEntity(name);
+        if (name) {
+            fetchEntityAttributes(name).then(setAttributes);
+        } else {
+            setAttributes([]);
+        }
+    }, [query, queryType, fetchEntityAttributes]);
 
     // Handle query type change with automatic conversion
     const handleQueryTypeChange = (newQueryType: QueryType) => {
@@ -397,6 +427,7 @@ WHERE statecode = 0`
                                     language={getEditorLanguage(queryType)}
                                     value={query}
                                     onChange={(value) => setQuery(value || '')}
+                                    onMount={handleEditorMount}
                                     theme="vs-light"
                                     options={{
                                         minimap: { enabled: false },

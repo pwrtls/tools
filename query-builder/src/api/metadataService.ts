@@ -162,6 +162,11 @@ export const useMetadataService = () => {
         attributeCache.clear();
     };
 
+    // Expose all cached or fetched entities for intellisense
+    const getAllEntities = async (): Promise<IEntityMetadata[]> => {
+        return fetchAllEntities();
+    };
+
     return {
         fetchAllEntities,
         fetchEntityMetadata,
@@ -171,6 +176,7 @@ export const useMetadataService = () => {
         searchEntities,
         searchAttributes,
         getEntitySetName,
-        clearCache
+        clearCache,
+        getAllEntities
     };
-}; 
+};
