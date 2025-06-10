@@ -11,7 +11,7 @@ import {
     Row,
     Col,
     Statistic,
-    message,
+    App,
     Tooltip
 } from 'antd';
 import { 
@@ -65,6 +65,7 @@ interface QueryBuilderProps {
 }
 
 export const QueryBuilder: React.FC<QueryBuilderProps> = ({ onEntitySelect }) => {
+    const { message } = App.useApp();
     const [queryType, setQueryType] = useState<QueryType>('odata');
     const [query, setQuery] = useState<string>('');
     const [loading, setLoading] = useState(false);
@@ -119,10 +120,6 @@ WHERE m.statecode = 0`
             if (conversionResult.success) {
                 setQuery(conversionResult.query);
                 setConversionWarnings(conversionResult.warnings || []);
-                
-                if (conversionResult.warnings && conversionResult.warnings.length > 0) {
-                    message.info(`Query converted from ${queryType.toUpperCase()} to ${newQueryType.toUpperCase()}`);
-                }
             } else {
                 // If conversion fails, show error and load sample instead
                 message.error(`Failed to convert query: ${conversionResult.error}`);
@@ -158,7 +155,7 @@ WHERE m.statecode = 0`
             setColumnWidths({}); // Reset column widths for new query results
 
             if (queryResult.success) {
-                message.success(`Query executed successfully. Retrieved ${queryResult.data?.length || 0} records.`);
+                // No message.success call after a successful query execution
             } else {
                 message.error(`Query failed: ${queryResult.error}`);
             }
@@ -369,27 +366,6 @@ WHERE m.statecode = 0`
                 <Text type="secondary">
                     Build and execute queries against Dynamics 365 / Power Platform using OData, FetchXML, or SQL syntax.
                 </Text>
-
-                {conversionWarnings.length > 0 && (
-                    <Alert
-                        message="Query Converted"
-                        description={
-                            <div>
-                                <p>Your query was automatically converted to {queryType.toUpperCase()} format:</p>
-                                <ul>
-                                    {conversionWarnings.map((warning, index) => (
-                                        <li key={index}>{warning}</li>
-                                    ))}
-                                </ul>
-                            </div>
-                        }
-                        type="info"
-                        showIcon
-                        closable
-                        onClose={() => setConversionWarnings([])}
-                        style={{ marginTop: 16 }}
-                    />
-                )}
 
                 <Row gutter={16} style={{ marginTop: 24 }}>
                     <Col span={24}>

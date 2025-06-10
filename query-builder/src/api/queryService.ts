@@ -2,9 +2,11 @@ import { useCallback } from 'react';
 import { usePowerToolsApi } from '../powertools/apiHook';
 import { IQueryRequest, IQueryResult } from '../models';
 import { QueryConverter } from '../utils/queryConverter';
+import { useMetadataService } from './metadataService';
 
 export const useQueryService = () => {
     const { get, post } = usePowerToolsApi();
+    const { getEntitySetName } = useMetadataService();
 
     const executeQuery = useCallback(async (request: IQueryRequest): Promise<IQueryResult> => {
         try {
@@ -67,7 +69,45 @@ export const useQueryService = () => {
                     totalCount: Array.isArray(result) ? result.length : 0,
                     hasMore: false, // TDS helper doesn't support pagination currently
                 };
+            } else if (queryType === 'fetchxml') {
+                try {
+                    // Extract entity name from FetchXML
+                    const entityNameMatch = /<entity\s+name=(?:"|')([^"']+)(?:"|')/.exec(query);
+                    if (!entityNameMatch) {
+                        return { success: false, error: 'Could not extract entity name from FetchXML.' };
+                    }
+                    const entityLogicalName = entityNameMatch[1];
+                    const entitySetName = await getEntitySetName(entityLogicalName);
 
+                    // Execute FetchXML directly using GET request to the entity set endpoint
+                    const params = new URLSearchParams();
+                    params.set('fetchXml', query); // URLSearchParams handles encoding
+
+                    const proxyResponse = await get(
+                        `/api/data/v9.2/${entitySetName}`,
+                        params,
+                        {
+                            'Prefer': 'odata.include-annotations="*"',
+                        }
+                    );
+                    
+                    if (proxyResponse.statusCode >= 400) {
+                        const errorResponse = JSON.parse(proxyResponse.content || '{}');
+                        return { success: false, error: errorResponse.error?.message || `Request failed with status ${proxyResponse.statusCode}` };
+                    }
+    
+                    const odataResponse = JSON.parse(proxyResponse.content || '{}');
+                    
+                    return {
+                        success: true,
+                        data: odataResponse.value,
+                        totalCount: odataResponse['@odata.count'],
+                        hasMore: !!odataResponse['@odata.nextLink'],
+                    };
+                } catch (error: any) {
+                    console.error('Error executing FetchXML query:', error);
+                    return { success: false, error: error?.message || 'Failed to execute FetchXML query' };
+                }
             } else {
                 const conversionResult = QueryConverter.convert(query, queryType, 'odata');
                 if (!conversionResult.success) {
@@ -102,7 +142,7 @@ export const useQueryService = () => {
                 error: error?.message || 'Failed to execute query'
             };
         }
-    }, [get, post]);
+    }, [get, post, getEntitySetName]);
 
     return { executeQuery };
 }; 
