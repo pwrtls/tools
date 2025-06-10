@@ -68,35 +68,49 @@ export const useMetadataService = () => {
     };
 
     const fetchEntityAttributes = async (entityLogicalName: string): Promise<IAttributeMetadata[]> => {
+        console.log('🔍 fetchEntityAttributes called with:', entityLogicalName);
+        
         // Check cache first
         if (attributeCache.has(entityLogicalName)) {
+            console.log('🔍 Found attributes in cache:', attributeCache.get(entityLogicalName)?.length);
             return attributeCache.get(entityLogicalName)!;
         }
+
+        console.log('🔍 Attributes not in cache, fetching from API...');
 
         try {
             // First get the entity metadata to get MetadataId
             const entity = await fetchEntityMetadata(entityLogicalName);
+            console.log('🔍 Entity metadata retrieved:', entity ? { LogicalName: entity.LogicalName, MetadataId: entity.MetadataId } : 'null');
+            
             if (!entity) {
                 console.warn(`Entity ${entityLogicalName} not found`);
                 return [];
             }
 
             const query = new URLSearchParams();
-            query.set('$select', 'LogicalName,SchemaName,MetadataId,DisplayName,AttributeType,IsValidForRead,IsValidForCreate,IsValidForUpdate,RequiredLevel,IsPrimaryId,IsPrimaryName,MaxLength');
-            query.set('$filter', 'IsValidForAdvancedFind eq true');
+            query.set('$select', 'LogicalName,SchemaName,MetadataId,DisplayName,AttributeType,IsValidForRead,IsValidForCreate,IsValidForUpdate,RequiredLevel,IsPrimaryId,IsPrimaryName');
+            query.set('$filter', 'IsValidForAdvancedFind/Value eq true');
             query.set('$orderby', 'DisplayName/UserLocalizedLabel/Label');
+
+            console.log('🔍 Making attributes API call with query:', query.toString());
 
             const response = await getAsJson<IODataResponse<IAttributeMetadata>>(
                 `/api/data/v9.2/EntityDefinitions(${entity.MetadataId})/Attributes`,
                 query
             );
 
+            console.log('🔍 Attributes API response received:', response ? { valueLength: response.value?.length, hasValue: !!response.value } : 'null response');
+            console.log('🔍 Raw API response structure:', JSON.stringify(response, null, 2));
+
             if (response && Array.isArray(response.value)) {
+                console.log('🔍 Caching', response.value.length, 'attributes for', entityLogicalName);
                 // Cache attributes for later use
                 attributeCache.set(entityLogicalName, response.value);
                 return response.value;
             }
 
+            console.log('🔍 No valid response or empty value array');
             return [];
         } catch (error) {
             console.error(`Error fetching attributes for entity ${entityLogicalName}:`, error);

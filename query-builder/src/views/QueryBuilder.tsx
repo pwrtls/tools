@@ -75,11 +75,15 @@ export const QueryBuilder: React.FC<QueryBuilderProps> = ({ onEntitySelect }) =>
 
     const resolveLogicalName = (name: string | null): string | null => {
         if (!name) return null;
+        console.log('🔍 resolveLogicalName called with:', name);
+        console.log('🔍 allEntitiesRef.current length:', allEntitiesRef.current?.length || 0);
+        
         const match = allEntitiesRef.current.find(
             e =>
                 e.LogicalName.toLowerCase() === name.toLowerCase() ||
                 e.EntitySetName.toLowerCase() === name.toLowerCase()
         );
+        console.log('🔍 Found match:', match ? { LogicalName: match.LogicalName, EntitySetName: match.EntitySetName } : 'No match');
         return match ? match.LogicalName : name;
     };
     
@@ -139,8 +143,12 @@ export const QueryBuilder: React.FC<QueryBuilderProps> = ({ onEntitySelect }) =>
         // Register completion providers
         registerCompletionProviders(monacoInstance, async (name: string | null) => {
             console.log('Completion provider called with entity name:', name);
+            console.log('🔍 Entities available in completion provider:', allEntitiesRef.current?.length || 0);
             const logical = resolveLogicalName(name);
+            console.log('🔍 Resolved logical name:', logical);
             const attrs = logical ? await fetchEntityAttributes(logical) : [];
+            console.log('🔍 Raw attributes returned from fetchEntityAttributes:', attrs);
+            console.log('🔍 Sample attribute (first one):', attrs[0]);
             console.log('Returning metadata:', { attributeCount: attrs.length, entityCount: allEntitiesRef.current.length });
             return { attributes: attrs, entities: allEntitiesRef.current };
         });
