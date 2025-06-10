@@ -167,7 +167,7 @@ export const QueryBuilder: React.FC<QueryBuilderProps> = ({ onEntitySelect }) =>
     // Sample queries for each type (memoized to prevent re-creation on every render)
     const sampleQueries = useMemo(() => ({
         odata: '/api/data/v9.2/accounts?$select=name,accountnumber,createdon&$top=10',
-        fetchxml: `<fetch version="1.0" output-format="xml-platform" mapping="logical" distinct="false">
+        fetchxml: `<fetch version="1.0" top="10" output-format="xml-platform" mapping="logical" distinct="false">
   <entity name="account">
     <attribute name="name" />
     <attribute name="accountnumber" />
