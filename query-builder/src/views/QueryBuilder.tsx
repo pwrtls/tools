@@ -190,6 +190,7 @@ WHERE statecode = 0`
     useEffect(() => {
         if (!query.trim()) {
             setQuery(sampleQueries[queryType]);
+            setResult(null);
         }
     }, [queryType, query, sampleQueries]);
 
