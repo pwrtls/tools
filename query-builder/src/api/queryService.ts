@@ -82,13 +82,12 @@ export const useQueryService = () => {
                     // Execute FetchXML directly using GET request to the entity set endpoint
                     const params = new URLSearchParams();
                     params.set('fetchXml', query); // URLSearchParams handles encoding
-                    params.set('$count', 'true'); // Add count parameter
 
                     const proxyResponse = await get(
                         `/api/data/v9.2/${entitySetName}`,
                         params,
                         {
-                            'Prefer': 'odata.include-annotations="*",odata.maxpagesize=5000,odata.count=true'
+                            'Prefer': 'odata.include-annotations="*",odata.maxpagesize=5000'
                         }
                     );
                     
@@ -99,11 +98,22 @@ export const useQueryService = () => {
     
                     const odataResponse = JSON.parse(proxyResponse.content || '{}');
                     
+                    // For FetchXML, we need to parse the next page from the query
+                    let nextPage: string | undefined = undefined;
+                    const pageMatch = /page="(\d+)"/.exec(query);
+                    const currentPage = pageMatch ? parseInt(pageMatch[1], 10) : 1;
+                    
+                    // Create next page query if we have results
+                    if (odataResponse.value && odataResponse.value.length > 0) {
+                        const nextPageQuery = query.replace(/page="\d+"/, `page="${currentPage + 1}"`);
+                        nextPage = nextPageQuery;
+                    }
+                    
                     return {
                         success: true,
                         data: odataResponse.value,
-                        hasMore: !!odataResponse['@odata.nextLink'],
-                        nextLink: odataResponse['@odata.nextLink'],
+                        hasMore: !!nextPage,
+                        nextLink: nextPage,
                     };
                 } catch (error: any) {
                     console.error('Error executing FetchXML query:', error);

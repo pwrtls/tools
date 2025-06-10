@@ -23,7 +23,7 @@ import {
 } from '@ant-design/icons';
 import Editor from '@monaco-editor/react';
 import { useQueryService } from '../api/queryService';
-import { QueryType, IQueryResult, IQueryRequest } from '../models';
+import { QueryType, IQueryResult, IQueryRequest, IODataResponse } from '../models';
 import { parseEntityName, registerCompletionProviders } from '../utils/intellisense';
 import { useMetadataService } from '../api/metadataService';
 import { Resizable } from 'react-resizable';
@@ -110,7 +110,6 @@ export const QueryBuilder: React.FC<QueryBuilderProps> = ({ onEntitySelect }) =>
             };
 
             const initialResult = await queryService.executeQuery(request);
-            console.log('Initial query result:', initialResult); // Log the initial result
             setResult(initialResult);
             setLoading(false);
 
@@ -118,30 +117,39 @@ export const QueryBuilder: React.FC<QueryBuilderProps> = ({ onEntitySelect }) =>
                 setLoadingMore(true);
                 let nextLink: string | undefined = initialResult.nextLink;
                 let currentData = initialResult.data || [];
-                const initialTotalCount = initialResult.totalCount; // Store the initial total count
-                console.log('Initial totalCount:', initialTotalCount);
 
                 while (nextLink) {
-                    const url: URL = new URL(nextLink);
-                    const path: string = url.pathname + url.search;
-                    const proxyResponse = await get(path, undefined, { 'Prefer': 'odata.maxpagesize=5000' });
-                    const newPage = await proxyResponse.asJson();
-                    console.log('Fetched new page:', newPage);
+                    let newPage: IODataResponse<any>;
+                    if (queryType === 'fetchxml') {
+                        // For FetchXML, nextLink is the actual query
+                        const request: IQueryRequest = {
+                            queryType,
+                            query: nextLink
+                        };
+                        const response = await queryService.executeQuery(request);
+                        newPage = {
+                            '@odata.context': '',
+                            value: response.data || [],
+                            '@odata.nextLink': response.nextLink
+                        };
+                    } else {
+                        // For OData, nextLink is a URL
+                        const url: URL = new URL(nextLink);
+                        const path: string = url.pathname + url.search;
+                        const proxyResponse = await get(path, undefined, { 'Prefer': 'odata.maxpagesize=5000' });
+                        newPage = await proxyResponse.asJson();
+                    }
                     
                     // Create a new array with the updated data
                     const updatedData = [...currentData, ...newPage.value];
                     
-                    // Update state with the new data, preserving the initial total count
-                    setResult(prevResult => {
-                        console.log('Setting totalCount in setResult:', initialTotalCount);
-                        return {
-                            ...prevResult!,
-                            data: updatedData,
-                            nextLink: newPage['@odata.nextLink'],
-                            hasMore: !!newPage['@odata.nextLink'],
-                            totalCount: initialTotalCount // Use the initial total count
-                        };
-                    });
+                    // Update state with the new data
+                    setResult(prevResult => ({
+                        ...prevResult!,
+                        data: updatedData,
+                        nextLink: newPage['@odata.nextLink'],
+                        hasMore: !!newPage['@odata.nextLink']
+                    }));
 
                     // Update local variables for next iteration
                     currentData = updatedData;
