@@ -78,12 +78,23 @@ export const QueryBuilder: React.FC<QueryBuilderProps> = ({ onEntitySelect }) =>
 
     const { fetchEntityAttributes, getAllEntities } = useMetadataService();
     const allEntitiesRef = React.useRef<any[]>([]);
+
+    const resolveLogicalName = (name: string | null): string | null => {
+        if (!name) return null;
+        const match = allEntitiesRef.current.find(
+            e =>
+                e.LogicalName.toLowerCase() === name.toLowerCase() ||
+                e.EntitySetName.toLowerCase() === name.toLowerCase()
+        );
+        return match ? match.LogicalName : name;
+    };
     
     const queryService = useQueryService();
 
     const handleEditorMount = (_editor: any, monacoInstance: any) => {
         registerCompletionProviders(monacoInstance, async (name: string | null) => {
-            const attrs = name ? await fetchEntityAttributes(name) : [];
+            const logical = resolveLogicalName(name);
+            const attrs = logical ? await fetchEntityAttributes(logical) : [];
             return { attributes: attrs, entities: allEntitiesRef.current };
         });
     };
@@ -92,7 +103,7 @@ export const QueryBuilder: React.FC<QueryBuilderProps> = ({ onEntitySelect }) =>
         getAllEntities().then(list => {
             allEntitiesRef.current = list;
         });
-    }, [getAllEntities]);
+    }, []);
 
     // Sample queries for each type (memoized to prevent re-creation on every render)
     const sampleQueries = useMemo(() => ({
@@ -125,13 +136,14 @@ WHERE statecode = 0`
 
     useEffect(() => {
         const name = parseEntityName(query, queryType);
-        setCurrentEntity(name);
-        if (name) {
-            fetchEntityAttributes(name).then(setAttributes);
+        const logical = resolveLogicalName(name);
+        setCurrentEntity(logical);
+        if (logical) {
+            fetchEntityAttributes(logical).then(setAttributes);
         } else {
             setAttributes([]);
         }
-    }, [query, queryType, fetchEntityAttributes]);
+    }, [query, queryType]);
 
     // Handle query type change with automatic conversion
     const handleQueryTypeChange = (newQueryType: QueryType) => {
