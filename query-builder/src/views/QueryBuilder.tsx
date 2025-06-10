@@ -19,7 +19,8 @@ import {
     PlayCircleOutlined, 
     DatabaseOutlined, 
     DownloadOutlined,
-    SwapOutlined
+    SwapOutlined,
+    CopyOutlined
 } from '@ant-design/icons';
 import Editor from '@monaco-editor/react';
 import { useQueryService } from '../api/queryService';
@@ -94,6 +95,7 @@ export const QueryBuilder: React.FC<QueryBuilderProps> = ({ onEntitySelect }) =>
     
     const queryService = useQueryService();
     const executeQueryRef = React.useRef<(() => void) | undefined>(undefined);
+    const editorRef = React.useRef<any>(null);
 
     const handleExecuteQuery = useCallback(async () => {
         if (!query.trim()) {
@@ -174,7 +176,41 @@ export const QueryBuilder: React.FC<QueryBuilderProps> = ({ onEntitySelect }) =>
         executeQueryRef.current = handleExecuteQuery;
     }, [handleExecuteQuery]);
 
+    const handleCopyQuery = () => {
+        if (query) {
+            try {
+                // Create a temporary textarea element
+                const textArea = document.createElement('textarea');
+                textArea.value = query;
+                
+                // Make the textarea out of viewport
+                textArea.style.position = 'fixed';
+                textArea.style.left = '-999999px';
+                textArea.style.top = '-999999px';
+                document.body.appendChild(textArea);
+                
+                // Select and copy the text
+                textArea.focus();
+                textArea.select();
+                const successful = document.execCommand('copy');
+                
+                // Clean up
+                document.body.removeChild(textArea);
+                
+                if (successful) {
+                    message.success('Query copied to clipboard');
+                } else {
+                    message.error('Failed to copy query');
+                }
+            } catch (err) {
+                console.error('Failed to copy:', err);
+                message.error('Failed to copy query');
+            }
+        }
+    };
+
     const handleEditorMount = (_editor: any, monacoInstance: any) => {
+        editorRef.current = _editor;
         // Register custom languages if not already registered
         const languages = monacoInstance.languages.getLanguages();
         
@@ -196,6 +232,15 @@ export const QueryBuilder: React.FC<QueryBuilderProps> = ({ onEntitySelect }) =>
                 monacoInstance.KeyMod.CtrlCmd | monacoInstance.KeyCode.Enter,
             ],
             run: () => executeQueryRef.current?.(),
+        });
+
+        _editor.addAction({
+            id: 'copy-query',
+            label: 'Copy Query',
+            keybindings: [
+                monacoInstance.KeyMod.CtrlCmd | monacoInstance.KeyCode.KeyC,
+            ],
+            run: () => handleCopyQuery(),
         });
     };
 
@@ -488,6 +533,11 @@ WHERE statecode = 0`
                                     >
                                         Execute Query
                                     </Button>
+                                    <Button 
+                                        icon={<CopyOutlined />}
+                                        onClick={handleCopyQuery}
+                                        disabled={!query}
+                                    />
                                 </Space>
                             }
                         >
