@@ -267,7 +267,7 @@ async function provideSqlCompletions(
     const partialWordMatch = currentLine.match(/\b([a-zA-Z_][a-zA-Z0-9_]*)$/);
     const typingPartialWord = partialWordMatch !== null;
     const partialWord = typingPartialWord ? partialWordMatch[1] : '';
-    
+
     if (afterFromMatch) {
         // User just typed "FROM " - suggest entities
         metadata.entities.forEach(entity => {

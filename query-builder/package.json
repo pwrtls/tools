@@ -30,7 +30,7 @@
   "scripts": {
     "start": "cross-env PORT=4203 react-scripts start",
     "build": "react-scripts build",
-    "test": "react-scripts test",
+    "test": "cross-env NODE_OPTIONS=--no-deprecation react-scripts test",
     "eject": "react-scripts eject"
   },
   "eslintConfig": {
@@ -50,5 +50,8 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
+  },
+  "devDependencies": {
+    "punycode": "^2.3.1"
   }
 }
