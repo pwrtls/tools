@@ -5,6 +5,7 @@ export interface ISolution {
     version: string;
     modifiedon: string;
     ismanaged: boolean;
+    createdon: string;
 
     installedon: string;
 

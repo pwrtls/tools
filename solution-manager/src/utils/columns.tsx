@@ -9,26 +9,37 @@ import { SolutionInfo } from './info';
 
 import { useMemo } from 'react';
 
-export const solutionsColumns: ColumnsType<ISolution> = [
-    {
-        title: 'Friendly Name', dataIndex: 'friendlyname', key: 'friendlyName',// sorter: true, defaultSortOrder: 'ascend',
-        render: (value, record) => <SolutionInfo friendlyName={value} isManaged={record.ismanaged} />,
-    },
-    {
-        title: 'Unique Name', dataIndex: 'uniquename', key: 'uniqueName',// ellipsis: true, sorter: true
-    },
-    {
-        title: 'Version', dataIndex: 'version', key: 'version',
-    },
-    {
-        title: 'Modified On', dataIndex: 'modifiedon', key: 'modifiedOn',// sorter: true,
-        render: (modified: string) => new Date(modified).toLocaleDateString(),
-    }/*,
-    {
-        title: 'View Details', key: 'detailsBtn',
-        render: (_, record) => <ViewSolutionDetailsButton solutionId={record.solutionid} />,
-    }*/,
-];
+export const useSolutionsColumns = (onViewClick: (solutionId: string) => void): ColumnsType<ISolution> => {
+    return useMemo(() => [
+        {
+            title: 'Friendly Name', dataIndex: 'friendlyname', key: 'friendlyName',
+            render: (value, record) => (
+                <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); onViewClick(record.solutionid); }}
+                    style={{ background: 'none', border: 'none', color: '#1890ff', padding: 0, cursor: 'pointer', textDecoration: 'underline' }}
+                    aria-label={`View details for ${value}`}
+                >
+                    <SolutionInfo friendlyName={value} isManaged={record.ismanaged} />
+                </button>
+            ),
+        },
+        {
+            title: 'Unique Name', dataIndex: 'uniquename', key: 'uniqueName',
+        },
+        {
+            title: 'Version', dataIndex: 'version', key: 'version',
+        },
+        {
+            title: 'Modified On', dataIndex: 'modifiedon', key: 'modifiedOn',
+            render: (modified: string) => new Date(modified).toLocaleDateString(),
+        }/*,
+        {
+            title: 'View Details', key: 'detailsBtn',
+            render: (_, record) => <ViewSolutionDetailsButton solutionId={record.solutionid} />,
+        }*/,
+    ], [onViewClick]);
+};
 
 export const useSolutionComponentColumns = (solutionId?: string) => {
     return useMemo(() => [

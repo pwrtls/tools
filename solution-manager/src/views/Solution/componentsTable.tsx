@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
-import { Button, Table, Modal, Progress, message, Space, Popconfirm } from 'antd';
+import { Button, Table, Modal, Progress, message, Space, Popconfirm, Input } from 'antd';
 import { usePowerToolsApi } from 'powertools/apiHook';
 import { useSolutionComponentColumns } from 'utils/columns';
 import { IoDataResponse } from 'models/oDataResponse';
@@ -23,6 +23,8 @@ export const ComponentsTable: React.FC<ComponentsTableProps> = (props) => {
     const [copying, setCopying] = useState(false);
     const [progress, setProgress] = useState(0);
     const [operationDebugInfo, setOperationDebugInfo] = useState<string[]>([]);
+    const [solutionSearch, setSolutionSearch] = useState('');
+    const [solutionSearchTimeout, setSolutionSearchTimeout] = useState<NodeJS.Timeout | null>(null);
 
     const { copyToComponents, deleteComponents } = useComponentOperations(
         post, 
@@ -88,22 +90,44 @@ export const ComponentsTable: React.FC<ComponentsTableProps> = (props) => {
             title: 'Friendly Name',
             dataIndex: 'friendlyname',
             key: 'friendlyname',
+            sorter: (a: ISolution, b: ISolution) => (a.friendlyname || '').localeCompare(b.friendlyname || ''),
         },
         {
             title: 'Unique Name',
             dataIndex: 'uniquename',
             key: 'uniquename',
+            sorter: (a: ISolution, b: ISolution) => (a.uniquename || '').localeCompare(b.uniquename || ''),
         },
         {
             title: 'Version',
             dataIndex: 'version',
             key: 'version',
+            sorter: (a: ISolution, b: ISolution) => (a.version || '').localeCompare(b.version || ''),
         },
         {
             title: 'Publisher',
             dataIndex: 'publisherid',
             key: 'publisherid',
-            render: (publisher: { name: string }) => publisher?.name || 'N/A',
+            render: (publisher: { friendlyname: string }) => publisher?.friendlyname || 'N/A',
+            sorter: (a: ISolution, b: ISolution) => {
+                const aName = a.publisherid?.friendlyname || '';
+                const bName = b.publisherid?.friendlyname || '';
+                return aName.localeCompare(bName);
+            },
+        },
+        {
+            title: 'Created On',
+            dataIndex: 'createdon',
+            key: 'createdon',
+            sorter: (a: ISolution, b: ISolution) => new Date(a.createdon).getTime() - new Date(b.createdon).getTime(),
+            render: (date: string) => date ? new Date(date).toLocaleString() : 'N/A',
+        },
+        {
+            title: 'Modified On',
+            dataIndex: 'modifiedon',
+            key: 'modifiedon',
+            sorter: (a: ISolution, b: ISolution) => new Date(a.modifiedon).getTime() - new Date(b.modifiedon).getTime(),
+            render: (date: string) => date ? new Date(date).toLocaleString() : 'N/A',
         },
         {
             title: 'Action',
@@ -168,6 +192,24 @@ export const ComponentsTable: React.FC<ComponentsTableProps> = (props) => {
         </Space>
     ), [selectedRowKeys, showUnmanagedSolutionsModal, handleDeleteComponents]);
 
+    const handleSolutionSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const value = e.target.value;
+        if (solutionSearchTimeout) clearTimeout(solutionSearchTimeout);
+        setSolutionSearchTimeout(setTimeout(() => setSolutionSearch(value), 300));
+    };
+
+    const filteredUnmanagedSolutions = useMemo(() => {
+        if (!solutionSearch) return unmanagedSolutions;
+        const lower = solutionSearch.toLowerCase();
+        return unmanagedSolutions.filter(s =>
+            (s.friendlyname && s.friendlyname.toLowerCase().includes(lower)) ||
+            (s.uniquename && s.uniquename.toLowerCase().includes(lower)) ||
+            (s.version && s.version.toLowerCase().includes(lower)) ||
+            (s.createdon && new Date(s.createdon).toLocaleString().toLowerCase().includes(lower)) ||
+            (s.modifiedon && new Date(s.modifiedon).toLocaleString().toLowerCase().includes(lower))
+        );
+    }, [unmanagedSolutions, solutionSearch]);
+
     return (
         <div>
             <Modal
@@ -175,14 +217,29 @@ export const ComponentsTable: React.FC<ComponentsTableProps> = (props) => {
                 open={isModalVisible}
                 onCancel={() => setIsModalVisible(false)}
                 footer={null}
-                width={800}
+                width={1200}
+                bodyStyle={{ padding: 0 }}
+                style={{ top: 40 }}
             >
-                <Table
-                    dataSource={unmanagedSolutions}
-                    columns={solutionColumns}
-                    rowKey="solutionid"
-                    pagination={false}
-                />
+                <div style={{ padding: 24 }}>
+                    <Input.Search
+                        placeholder="Search solutions..."
+                        allowClear
+                        onChange={handleSolutionSearchChange}
+                        style={{ width: '100%', marginBottom: 16 }}
+                    />
+                    <div style={{ width: '100%', overflowX: 'auto' }}>
+                        <Table
+                            dataSource={filteredUnmanagedSolutions}
+                            columns={solutionColumns}
+                            rowKey="solutionid"
+                            pagination={false}
+                            bordered
+                            size="middle"
+                            scroll={{ x: true }}
+                        />
+                    </div>
+                </div>
             </Modal>
 
             <Modal
