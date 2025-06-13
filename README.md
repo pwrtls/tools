@@ -1,5 +1,17 @@
 # Power Tools
 
+**Power Tools is an extensible, cross-platform toolkit for developers, power users, and analysts working with the Microsoft Power Platform.**
+
+Think of it as a modern, web-based alternative to `XrmToolBox`. Our platform provides a secure wrapper for Dataverse APIs, admin APIs, and Power Query APIs, enabling a community of builders to create and share tools that simplify complex tasks and daily workflows.
+
+While developers will appreciate the streamlined environment, the tools themselves are designed to empower anyone who needs to interact with Power Platform data and metadata in a more sophisticated way.
+
+A key advantage is that Power Tools is not restricted to a single operating system. By leveraging familiar web technologies like React and Svelte, **it opens up tool development to the large and growing community of client-side developers.** This provides a significant advantage over traditional desktop applications that require specific C# or Windows Forms expertise, fostering a more inclusive and vibrant ecosystem for community-built tools.
+
+The project is designed for contribution and includes features to help developers easily test the new tools they create for the platform.
+
+---
+
 This repositry contains published tools and example tools.
 
 ## jQuery-example
