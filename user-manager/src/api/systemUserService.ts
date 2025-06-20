@@ -24,40 +24,30 @@ export const getSystemUsers = async (
     let url = `/api/data/v9.2/systemusers`;
     let allUsers: ISystemUser[] = [];
 
-    if (viewId && viewType) {
-        if (viewType === 'system') {
-            url += `?savedQuery=${viewId}`;
+    // If we have a nextLink, use it directly
+    if (nextLink && !fetchAll) {
+        if (nextLink.startsWith('SKIP:')) {
+            // Our internal skip token - only works for non-view queries
+            const skipValue = parseInt(nextLink.split(':')[1]);
+            
+            // Only use $skip for basic queries, not for view queries
+            if (!viewId || !viewType) {
+                url += `?$select=fullname,internalemailaddress,domainname,isdisabled`;
+                
+                if (search && columns) {
+                    const searchFilters = buildSearchFilter(search, columns);
+                    if (searchFilters) {
+                        url += `&$filter=${searchFilters}`;
+                    }
+                }
+                url += `&$skip=${skipValue}&$top=50`;
+            } else {
+                // For view queries, we can't use $skip - return no more data
+                console.log('Cannot paginate view queries with $skip, stopping pagination');
+                return { users: [], hasMore: false };
+            }
         } else {
-            url += `?userQuery=${viewId}`;
-        }
-        
-        // Add search filter to view queries
-        if (search && columns) {
-            const searchFilters = buildSearchFilter(search, columns);
-            if (searchFilters) {
-                url += `&$filter=${searchFilters}`;
-            }
-        }
-    } else {
-        let select = `?$select=fullname,internalemailaddress,domainname,isdisabled`;
-        if (fetchAll) {
-            select = `?$select=systemuserid`;
-        }
-        url += select;
-        
-        // Add search filter for global search
-        if (search && columns) {
-            const searchFilters = buildSearchFilter(search, columns);
-            if (searchFilters) {
-                url += `&$filter=${searchFilters}`;
-            }
-        }
-    }
-
-    // Add pagination
-    if (!fetchAll) {
-        if (nextLink) {
-            // The nextLink is a full URL, we need to extract the path and query string
+            // Full OData nextLink URL - this should work for view queries
             try {
                 const nextUrl = new URL(nextLink);
                 url = `${nextUrl.pathname}${nextUrl.search}`;
@@ -65,9 +55,49 @@ export const getSystemUsers = async (
                 console.error("Failed to parse nextLink URL, stopping pagination.", e);
                 return { users: [], hasMore: false };
             }
+        }
+    } else {
+        // First page or fetchAll - build the initial URL
+        if (viewId && viewType) {
+            if (viewType === 'system') {
+                url += `?savedQuery=${viewId}`;
+            } else {
+                url += `?userQuery=${viewId}`;
+            }
+            
+            // Add search filter to view queries
+            if (search && columns) {
+                const searchFilters = buildSearchFilter(search, columns);
+                if (searchFilters) {
+                    url += `&$filter=${searchFilters}`;
+                }
+            }
         } else {
+            let select = `?$select=fullname,internalemailaddress,domainname,isdisabled`;
+            if (fetchAll) {
+                select = `?$select=systemuserid`;
+            }
+            url += select;
+            
+            // Add search filter for global search
+            if (search && columns) {
+                const searchFilters = buildSearchFilter(search, columns);
+                if (searchFilters) {
+                    url += `&$filter=${searchFilters}`;
+                }
+            }
+        }
+
+        // Add pagination for first page (not fetchAll)
+        if (!fetchAll) {
             const separator = url.includes('?') ? '&' : '?';
-            url += `${separator}$top=50`; // Load 50 records per page
+            if (viewId && viewType) {
+                // For view queries, try to get more records since pagination might not work
+                url += `${separator}$top=200`;
+            } else {
+                // For basic queries, use standard page size
+                url += `${separator}$top=50`;
+            }
         }
     }
 
@@ -102,8 +132,34 @@ export const getSystemUsers = async (
         const result = await powerTools.get(url);
         const jsonResult = await result.asJson<{ value: ISystemUser[]; "@odata.nextLink"?: string }>();
         const users = jsonResult?.value || [];
-        const hasMore = !!jsonResult?.["@odata.nextLink"];
-        const nextLink = jsonResult?.["@odata.nextLink"];
+        
+        // Single pagination logic: determine if there are more records
+        let hasMore = false;
+        let nextLink: string | undefined;
+        
+        // Determine if there are more records
+        if (jsonResult?.["@odata.nextLink"]) {
+            // API provided its own nextLink (most reliable)
+            nextLink = jsonResult["@odata.nextLink"];
+            hasMore = true;
+        } else if (users.length === 50 && (!viewId || !viewType)) {
+            // Got exactly the page size we requested for basic queries, likely more records exist
+            // Only use manual pagination for non-view queries
+            const currentSkip = url.includes('$skip=') ? 
+                parseInt(url.match(/\$skip=(\d+)/)?.[1] || '0') : 0;
+            const nextSkip = currentSkip + users.length;
+            
+            // Use our simple internal format for next page
+            nextLink = `SKIP:${nextSkip}`;
+            hasMore = true;
+        } else if (users.length === 200 && viewId && viewType) {
+            // Got full page for view query (200 records), but we can't manually paginate
+            // View queries should provide @odata.nextLink if more data exists
+            hasMore = false;
+        } else {
+            // Got fewer records than requested, this is likely the last page
+            hasMore = false;
+        }
         
         return { users, hasMore, nextLink };
     }

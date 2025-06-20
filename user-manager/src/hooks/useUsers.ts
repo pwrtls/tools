@@ -54,9 +54,13 @@ export const useUsers = (views: IView[]) => {
             resetPagination();
             setSearchText('');
             getSystemUsers(powerTools)
-                .then(result => {
-                    setUsers(result.users);
-                    setHasMore(result.hasMore);
+                                .then(result => {
+                    // Remove duplicates from initial load
+                    const uniqueUsers = result.users.filter((user, index, self) => 
+                        index === self.findIndex(u => u.systemuserid === user.systemuserid)
+                    );
+                    setUsers(uniqueUsers);
+                    setHasMore(!!result.nextLink);
                     setNextLink(result.nextLink);
                 })
                 .finally(() => setLoading(false));
@@ -64,14 +68,23 @@ export const useUsers = (views: IView[]) => {
     }, [powerTools, resetPagination]);
 
     const loadMoreUsers = useCallback(async () => {
-        if (!hasMore || loadingMore || !nextLink) return;
-
+        if (!hasMore || loadingMore || !nextLink) {
+            return;
+        }
         setLoadingMore(true);
         try {
             const viewType = selectedView ? views.find(v => v.id === selectedView)?.type : undefined;
             const result = await getSystemUsers(powerTools, selectedView, viewType, searchText, false, columns, nextLink);
-            setUsers(prev => [...prev, ...result.users]);
-            setHasMore(result.hasMore);
+            
+            // Prevent duplicates by checking existing user IDs
+            setUsers(prev => {
+                const existingIds = new Set(prev.map(user => user.systemuserid));
+                const newUsers = result.users.filter(user => !existingIds.has(user.systemuserid));
+
+                return [...prev, ...newUsers];
+            });
+            
+            setHasMore(!!result.nextLink);
             setNextLink(result.nextLink);
         } catch (error) {
             console.error('Failed to load more users:', error);
@@ -95,8 +108,12 @@ export const useUsers = (views: IView[]) => {
         }
 
         getSystemUsers(powerTools, viewId, selected.type, undefined, false, columns).then(result => {
-            setUsers(result.users);
-            setHasMore(result.hasMore);
+            // Remove duplicates from initial view load
+            const uniqueUsers = result.users.filter((user, index, self) => 
+                index === self.findIndex(u => u.systemuserid === user.systemuserid)
+            );
+            setUsers(uniqueUsers);
+            setHasMore(!!result.nextLink);
             setNextLink(result.nextLink);
             if (selected) {
                 const parser = new XMLParser({ ignoreAttributes: false });
@@ -128,8 +145,12 @@ export const useUsers = (views: IView[]) => {
             if (selected) {
                 getSystemUsers(powerTools, selected.id, selected.type, value, false, columns)
                     .then(result => {
-                        setUsers(result.users);
-                        setHasMore(result.hasMore);
+                        // Remove duplicates from search results
+                        const uniqueUsers = result.users.filter((user, index, self) => 
+                            index === self.findIndex(u => u.systemuserid === user.systemuserid)
+                        );
+                        setUsers(uniqueUsers);
+                        setHasMore(!!result.nextLink);
                         setNextLink(result.nextLink);
                     })
                     .finally(() => setLoading(false));
@@ -138,8 +159,12 @@ export const useUsers = (views: IView[]) => {
             // Global search when no view is selected
             getSystemUsers(powerTools, undefined, undefined, value, false, columns)
                 .then(result => {
-                    setUsers(result.users);
-                    setHasMore(result.hasMore);
+                    // Remove duplicates from global search results
+                    const uniqueUsers = result.users.filter((user, index, self) => 
+                        index === self.findIndex(u => u.systemuserid === user.systemuserid)
+                    );
+                    setUsers(uniqueUsers);
+                    setHasMore(!!result.nextLink);
                     setNextLink(result.nextLink);
                     setColumns(defaultColumns);
                 })
@@ -163,8 +188,12 @@ export const useUsers = (views: IView[]) => {
         resetPagination();
         setSearchText('');
         getSystemUsers(powerTools).then(result => {
-            setUsers(result.users);
-            setHasMore(result.hasMore);
+            // Remove duplicates from initial load
+            const uniqueUsers = result.users.filter((user, index, self) => 
+                index === self.findIndex(u => u.systemuserid === user.systemuserid)
+            );
+            setUsers(uniqueUsers);
+            setHasMore(!!result.nextLink);
             setNextLink(result.nextLink);
         }).finally(() => setLoading(false));
     }, [powerTools, defaultColumns, resetPagination]);

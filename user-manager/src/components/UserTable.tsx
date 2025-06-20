@@ -23,37 +23,40 @@ export const UserTable = ({
     rowSelection, 
     onLoadMore 
 }: UserTableProps) => {
-    const tableRef = useRef<HTMLDivElement>(null);
+    const tableContainerRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
+        const tableBody = tableContainerRef.current?.querySelector('.ant-table-body');
+        if (!tableBody) return;
+
         const handleScroll = () => {
-            if (!tableRef.current || loadingMore || !hasMore) return;
+            if (loadingMore || !hasMore) {
+                return;
+            }
 
-            const { scrollTop, scrollHeight, clientHeight } = tableRef.current;
-            const scrollPercentage = (scrollTop + clientHeight) / scrollHeight;
+            const { scrollTop, scrollHeight, clientHeight } = tableBody;
+            const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
 
-            // Load more when user scrolls to 80% of the content
-            if (scrollPercentage > 0.8) {
+            // Load more when user is near the bottom of the scroll area
+            if (distanceFromBottom < 200) {
                 onLoadMore();
             }
         };
 
-        const tableElement = tableRef.current;
-        if (tableElement) {
-            tableElement.addEventListener('scroll', handleScroll);
-            return () => tableElement.removeEventListener('scroll', handleScroll);
-        }
-    }, [loadingMore, hasMore, onLoadMore]);
+        tableBody.addEventListener('scroll', handleScroll);
+        return () => tableBody.removeEventListener('scroll', handleScroll);
+        
+    }, [loadingMore, hasMore, onLoadMore, users]); // Re-attach listener if users change
 
     return (
-        <div ref={tableRef} style={{ maxHeight: '600px', overflow: 'auto' }}>
+        <div ref={tableContainerRef}>
             <Table
                 loading={loading}
                 rowSelection={rowSelection}
                 columns={columns}
                 dataSource={users}
                 rowKey="systemuserid"
-                pagination={false} // Disable pagination since we're using infinite scroll
+                pagination={false}
                 scroll={{ y: 600, x: 'max-content' }}
             />
             {loadingMore && (
