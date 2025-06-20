@@ -103,6 +103,94 @@ export const useUsers = (views: IView[]) => {
         return controller;
     }, []);
 
+    // Helper function: Handle successful API response
+    const handleApiSuccess = useCallback((controller: AbortController, result: any, updateColumns = false) => {
+        if (!controller.signal.aborted) {
+            setUsers(result.users);
+            setHasMore(result.hasMore);
+            setNextLink(result.nextLink);
+            
+            if (updateColumns) {
+                setColumns(defaultColumns);
+            }
+        }
+    }, [defaultColumns]);
+
+    // Helper function: Handle API errors
+    const handleApiError = useCallback((controller: AbortController, error: any, context: string) => {
+        if (!controller.signal.aborted) {
+            if (process.env.NODE_ENV === 'development') {
+                console.error(`Failed to ${context}:`, error);
+            }
+            setUsers([]);
+        }
+    }, []);
+
+    // Helper function: Handle loading state
+    const handleLoadingComplete = useCallback((controller: AbortController) => {
+        if (!controller.signal.aborted) {
+            setLoading(false);
+        }
+    }, []);
+
+    // REFACTOR: Extracted restoration logic for empty search
+    const restoreViewUsers = useCallback(async (controller: AbortController) => {
+        const selected = views.find(v => v.id === selectedView);
+        if (selected) {
+            try {
+                const result = await getSystemUsers(powerTools, selected.id, selected.type, undefined, false, columns, undefined, controller.signal);
+                handleApiSuccess(controller, result);
+            } catch (error) {
+                handleApiError(controller, error, 'restore view users');
+            } finally {
+                handleLoadingComplete(controller);
+            }
+        } else {
+            setLoading(false);
+        }
+    }, [selectedView, views, powerTools, columns, handleApiSuccess, handleApiError, handleLoadingComplete]);
+
+    // REFACTOR: Extracted restoration logic for global users
+    const restoreAllUsers = useCallback(async (controller: AbortController) => {
+        try {
+            const result = await getSystemUsers(powerTools, undefined, undefined, undefined, false, defaultColumns, undefined, controller.signal);
+            handleApiSuccess(controller, result, true);
+        } catch (error) {
+            handleApiError(controller, error, 'restore all users');
+        } finally {
+            handleLoadingComplete(controller);
+        }
+    }, [powerTools, defaultColumns, handleApiSuccess, handleApiError, handleLoadingComplete]);
+
+    // REFACTOR: Extracted search logic for view search
+    const searchInView = useCallback(async (controller: AbortController, searchTerm: string) => {
+        const selected = views.find(v => v.id === selectedView);
+        if (selected) {
+            try {
+                const result = await getSystemUsers(powerTools, selected.id, selected.type, searchTerm, false, columns, undefined, controller.signal);
+                handleApiSuccess(controller, result);
+            } catch (error) {
+                handleApiError(controller, error, 'search in view');
+            } finally {
+                handleLoadingComplete(controller);
+            }
+        } else {
+            setLoading(false);
+        }
+    }, [selectedView, views, powerTools, columns, handleApiSuccess, handleApiError, handleLoadingComplete]);
+
+    // REFACTOR: Extracted search logic for global search
+    const searchGlobally = useCallback(async (controller: AbortController, searchTerm: string) => {
+        try {
+            const result = await getSystemUsers(powerTools, undefined, undefined, searchTerm, false, columns, undefined, controller.signal);
+            handleApiSuccess(controller, result, true);
+        } catch (error) {
+            handleApiError(controller, error, 'perform global search');
+        } finally {
+            handleLoadingComplete(controller);
+        }
+    }, [powerTools, columns, handleApiSuccess, handleApiError, handleLoadingComplete]);
+
     // Performance: Effect cleanup on unmount
     useEffect(() => {
         return cleanup;
@@ -257,126 +345,29 @@ export const useUsers = (views: IView[]) => {
             });
     }, [powerTools, views, statusColumn, defaultColumns, columns, resetPagination, cleanup, xmlParser, createAbortController]);
 
-    // Performance: Search effect with debouncing
+    // REFACTOR: Simplified and more readable search effect
     useEffect(() => {
         const controller = createAbortController();
         setLoading(true);
         resetPagination();
         
-        // BUG FIX: Handle empty search - restore original list
-        // This ensures that when users clear the search box, they see the full list again
+        // Handle empty search - restore original list
         if (!debouncedSearchText.trim()) {
             if (selectedView) {
-                // Restore view users when search is cleared
-                const selected = views.find(v => v.id === selectedView);
-                if (selected) {
-                    getSystemUsers(powerTools, selected.id, selected.type, undefined, false, columns, undefined, controller.signal)
-                        .then(result => {
-                            if (!controller.signal.aborted) {
-                                setUsers(result.users);
-                                setHasMore(result.hasMore);
-                                setNextLink(result.nextLink);
-                            }
-                        })
-                        .catch(error => {
-                            if (!controller.signal.aborted) {
-                                if (process.env.NODE_ENV === 'development') {
-                                    console.error('Failed to restore view users:', error);
-                                }
-                                setUsers([]);
-                            }
-                        })
-                        .finally(() => {
-                            if (!controller.signal.aborted) {
-                                setLoading(false);
-                            }
-                        });
-                } else {
-                    setLoading(false);
-                }
+                restoreViewUsers(controller);
             } else {
-                // Restore all users when no view is selected and search is cleared
-                getSystemUsers(powerTools, undefined, undefined, undefined, false, defaultColumns, undefined, controller.signal)
-                    .then(result => {
-                        if (!controller.signal.aborted) {
-                            setUsers(result.users);
-                            setHasMore(result.hasMore);
-                            setNextLink(result.nextLink);
-                            setColumns(defaultColumns);
-                        }
-                    })
-                    .catch(error => {
-                        if (!controller.signal.aborted) {
-                            if (process.env.NODE_ENV === 'development') {
-                                console.error('Failed to restore all users:', error);
-                            }
-                            setUsers([]);
-                        }
-                    })
-                    .finally(() => {
-                        if (!controller.signal.aborted) {
-                            setLoading(false);
-                        }
-                    });
+                restoreAllUsers(controller);
             }
             return;
         }
         
-        // Handle search with text - existing search functionality
+        // Handle search with text
         if (selectedView) {
-            // Search within the current view using the current columns
-            const selected = views.find(v => v.id === selectedView);
-            if (selected) {
-                getSystemUsers(powerTools, selected.id, selected.type, debouncedSearchText, false, columns, undefined, controller.signal)
-                    .then(result => {
-                        if (!controller.signal.aborted) {
-                            setUsers(result.users);
-                            setHasMore(result.hasMore);
-                            setNextLink(result.nextLink);
-                        }
-                    })
-                    .catch(error => {
-                        if (!controller.signal.aborted) {
-                            if (process.env.NODE_ENV === 'development') {
-                                console.error('Failed to search in view:', error);
-                            }
-                            setUsers([]);
-                        }
-                    })
-                    .finally(() => {
-                        if (!controller.signal.aborted) {
-                            setLoading(false);
-                        }
-                    });
-            } else {
-                setLoading(false);
-            }
+            searchInView(controller, debouncedSearchText);
         } else {
-            // Global search when no view is selected
-            getSystemUsers(powerTools, undefined, undefined, debouncedSearchText, false, columns, undefined, controller.signal)
-                .then(result => {
-                    if (!controller.signal.aborted) {
-                        setUsers(result.users);
-                        setHasMore(result.hasMore);
-                        setNextLink(result.nextLink);
-                        setColumns(defaultColumns);
-                    }
-                })
-                .catch(error => {
-                    if (!controller.signal.aborted) {
-                        if (process.env.NODE_ENV === 'development') {
-                            console.error('Failed to perform global search:', error);
-                        }
-                        setUsers([]);
-                    }
-                })
-                .finally(() => {
-                    if (!controller.signal.aborted) {
-                        setLoading(false);
-                    }
-                });
+            searchGlobally(controller, debouncedSearchText);
         }
-    }, [debouncedSearchText, powerTools, selectedView, views, defaultColumns, columns, resetPagination, createAbortController]);
+    }, [debouncedSearchText, selectedView, restoreViewUsers, restoreAllUsers, searchInView, searchGlobally, resetPagination, createAbortController]);
 
     const handleSearch = useCallback((value: string) => {
         setSearchText(value);
