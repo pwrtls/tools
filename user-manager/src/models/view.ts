@@ -3,7 +3,7 @@ export interface IView {
   userqueryid?: string; // For personal views
   savedqueryid?: string; // For system views
   name: string;
-  fetchxml: string;
+  fetchxml?: string; // Optional - not always needed
   layoutxml: string;
   type: 'personal' | 'system'; // To distinguish between personal and system views
   ownerid?: any; // For personal views - who owns the view

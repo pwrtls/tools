@@ -12,14 +12,23 @@ declare interface IHeaders {
 	[key: string]: string;
 }
 
-declare interface Window {
-	PowerTools: {
-		version: string;
-		isLoaded(): boolean;
-		onLoad(): Promise<void>;
-		addConnectionChangeListener(listener: (connectionName: string | undefined) => void): void;
-		get(url: string, query?: URLSearchParams, headers?: IHeaders): Promise<IHttpResult>;
-		post(url: string, body?: any, headers?: IHeaders): Promise<IHttpResult>;
-        download(data: string, fileName?: string, mimeType?: string): Promise<void>;
-	};
+declare global {
+    interface Window {
+        PowerTools: {
+            get: (url: string) => Promise<{ asJson: <T>() => Promise<T>; content: string; statusCode: number }>;
+            post: (url: string, body?: any, headers?: any) => Promise<{ asJson: <T>() => Promise<T>; content: string; statusCode: number }>;
+            download: (url: string, fileName: string) => Promise<void>;
+            onLoad: () => Promise<void>;
+            addConnectionChangeListener: (callback: (name: string | undefined) => void) => void;
+        };
+    }
+    
+    namespace NodeJS {
+        interface ProcessEnv {
+            NODE_ENV: 'development' | 'production' | 'test';
+            REACT_APP_VERSION?: string;
+        }
+    }
 }
+
+export {};

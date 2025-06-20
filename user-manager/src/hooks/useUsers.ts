@@ -1,4 +1,4 @@
-import { useState, useEffect, useContext, useMemo, useCallback } from 'react';
+import { useState, useEffect, useContext, useMemo, useCallback, useRef } from 'react';
 import { ISystemUser } from '../models/systemUser';
 import { getSystemUsers } from '../api/systemUserService';
 import { PowerToolsContext } from '../powertools/context';
@@ -11,6 +11,23 @@ const formatColumnTitle = (name: string) => {
     return result.charAt(0).toUpperCase() + result.slice(1);
 };
 
+// Custom hook for debouncing
+const useDebounce = (value: string, delay: number) => {
+    const [debouncedValue, setDebouncedValue] = useState(value);
+
+    useEffect(() => {
+        const handler = setTimeout(() => {
+            setDebouncedValue(value);
+        }, delay);
+
+        return () => {
+            clearTimeout(handler);
+        };
+    }, [value, delay]);
+
+    return debouncedValue;
+};
+
 export const useUsers = (views: IView[]) => {
     const powerTools = useContext(PowerToolsContext);
     const [users, setUsers] = useState<ISystemUser[]>([]);
@@ -20,6 +37,15 @@ export const useUsers = (views: IView[]) => {
     const [searchText, setSearchText] = useState('');
     const [hasMore, setHasMore] = useState(true);
     const [nextLink, setNextLink] = useState<string | undefined>();
+    
+    // Performance: Debounce search input
+    const debouncedSearchText = useDebounce(searchText, 300);
+    
+    // Performance: Memoize XML parser to avoid recreating
+    const xmlParser = useMemo(() => new XMLParser({ ignoreAttributes: false }), []);
+    
+    // Performance: Use ref to track cleanup
+    const abortControllerRef = useRef<AbortController | null>(null);
 
     const statusColumn = useMemo((): ColumnsType<ISystemUser>[0] => ({
         title: 'Status',
@@ -48,6 +74,19 @@ export const useUsers = (views: IView[]) => {
         setNextLink(undefined);
     }, []);
 
+    // Performance: Cleanup function
+    const cleanup = useCallback(() => {
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+            abortControllerRef.current = null;
+        }
+    }, []);
+
+    // Performance: Effect cleanup on unmount
+    useEffect(() => {
+        return cleanup;
+    }, [cleanup]);
+
     useEffect(() => {
         if (powerTools.isLoaded) {
             setLoading(true);
@@ -59,6 +98,12 @@ export const useUsers = (views: IView[]) => {
                     setHasMore(result.hasMore);
                     setNextLink(result.nextLink);
                 })
+                .catch(error => {
+                    if (process.env.NODE_ENV === 'development') {
+                        console.error('Failed to load initial users:', error);
+                    }
+                    setUsers([]);
+                })
                 .finally(() => setLoading(false));
         }
     }, [powerTools, resetPagination]);
@@ -69,18 +114,22 @@ export const useUsers = (views: IView[]) => {
         setLoadingMore(true);
         try {
             const viewType = selectedView ? views.find(v => v.id === selectedView)?.type : undefined;
-            const result = await getSystemUsers(powerTools, selectedView, viewType, searchText, false, columns, nextLink);
+            const result = await getSystemUsers(powerTools, selectedView, viewType, debouncedSearchText, false, columns, nextLink);
             setUsers(prev => [...prev, ...result.users]);
             setHasMore(result.hasMore);
             setNextLink(result.nextLink);
         } catch (error) {
-            console.error('Failed to load more users:', error);
+            if (process.env.NODE_ENV === 'development') {
+                console.error('Failed to load more users:', error);
+            }
         } finally {
             setLoadingMore(false);
         }
-    }, [powerTools, hasMore, loadingMore, nextLink, columns, selectedView, searchText, views]);
+    }, [powerTools, hasMore, loadingMore, nextLink, columns, selectedView, debouncedSearchText, views]);
 
     const handleViewChange = useCallback((viewId: string) => {
+        cleanup(); // Cancel any pending requests
+        
         setLoading(true);
         setSelectedView(viewId);
         resetPagination();
@@ -94,80 +143,139 @@ export const useUsers = (views: IView[]) => {
             return;
         }
 
-        getSystemUsers(powerTools, viewId, selected.type, undefined, false, columns).then(result => {
-            setUsers(result.users);
-            setHasMore(result.hasMore);
-            setNextLink(result.nextLink);
-            if (selected) {
-                const parser = new XMLParser({ ignoreAttributes: false });
-                const layout = parser.parse(selected.layoutxml);
-                const cells = layout.grid.row.cell;
-                let newColumns = cells.map((cell: any) => ({
-                    title: formatColumnTitle(cell['@_name']),
-                    dataIndex: cell['@_name'],
-                    key: cell['@_name'],
-                    onHeaderCell: () => ({ style: { whiteSpace: 'nowrap' } }),
-                }));
-                if (!newColumns.some((col: any) => col.key === 'isdisabled')) {
-                    newColumns = [statusColumn, ...newColumns];
+        getSystemUsers(powerTools, viewId, selected.type, undefined, false, columns)
+            .then(result => {
+                setUsers(result.users);
+                setHasMore(result.hasMore);
+                setNextLink(result.nextLink);
+                if (selected?.layoutxml) {
+                    try {
+                        // Performance: Parse XML asynchronously using setTimeout
+                        setTimeout(() => {
+                            try {
+                                const layout = xmlParser.parse(selected.layoutxml);
+                                const cells = layout.grid.row.cell;
+                                let newColumns = cells.map((cell: any) => ({
+                                    title: formatColumnTitle(cell['@_name']),
+                                    dataIndex: cell['@_name'],
+                                    key: cell['@_name'],
+                                    onHeaderCell: () => ({ style: { whiteSpace: 'nowrap' } }),
+                                }));
+                                if (!newColumns.some((col: any) => col.key === 'isdisabled')) {
+                                    newColumns = [statusColumn, ...newColumns];
+                                }
+                                setColumns(newColumns);
+                            } catch (parseError) {
+                                if (process.env.NODE_ENV === 'development') {
+                                    console.error('Failed to parse view layout XML:', parseError);
+                                }
+                                setColumns(defaultColumns);
+                            }
+                        }, 0);
+                    } catch (error) {
+                        if (process.env.NODE_ENV === 'development') {
+                            console.error('Failed to process view layout:', error);
+                        }
+                        setColumns(defaultColumns);
+                    }
                 }
-                setColumns(newColumns);
-            }
-            setLoading(false);
-        });
-    }, [powerTools, views, statusColumn, defaultColumns, columns, resetPagination]);
+            })
+            .catch(error => {
+                if (process.env.NODE_ENV === 'development') {
+                    console.error('Failed to load view data:', error);
+                }
+                setUsers([]);
+            })
+            .finally(() => setLoading(false));
+    }, [powerTools, views, statusColumn, defaultColumns, columns, resetPagination, cleanup, xmlParser]);
 
-    const handleSearch = useCallback((value: string) => {
+    // Performance: Search effect with debouncing
+    useEffect(() => {
+        if (!debouncedSearchText.trim()) return;
+        
+        cleanup(); // Cancel any pending requests
         setLoading(true);
         resetPagination();
-        setSearchText(value);
         
         if (selectedView) {
             // Search within the current view using the current columns
             const selected = views.find(v => v.id === selectedView);
             if (selected) {
-                getSystemUsers(powerTools, selected.id, selected.type, value, false, columns)
+                getSystemUsers(powerTools, selected.id, selected.type, debouncedSearchText, false, columns)
                     .then(result => {
                         setUsers(result.users);
                         setHasMore(result.hasMore);
                         setNextLink(result.nextLink);
                     })
+                    .catch(error => {
+                        if (process.env.NODE_ENV === 'development') {
+                            console.error('Failed to search in view:', error);
+                        }
+                        setUsers([]);
+                    })
                     .finally(() => setLoading(false));
             }
         } else {
             // Global search when no view is selected
-            getSystemUsers(powerTools, undefined, undefined, value, false, columns)
+            getSystemUsers(powerTools, undefined, undefined, debouncedSearchText, false, columns)
                 .then(result => {
                     setUsers(result.users);
                     setHasMore(result.hasMore);
                     setNextLink(result.nextLink);
                     setColumns(defaultColumns);
                 })
+                .catch(error => {
+                    if (process.env.NODE_ENV === 'development') {
+                        console.error('Failed to perform global search:', error);
+                    }
+                    setUsers([]);
+                })
                 .finally(() => setLoading(false));
         }
-    }, [powerTools, selectedView, views, defaultColumns, columns, resetPagination]);
+    }, [debouncedSearchText, powerTools, selectedView, views, defaultColumns, columns, resetPagination, cleanup]);
+
+    const handleSearch = useCallback((value: string) => {
+        setSearchText(value);
+    }, []);
 
     const fetchAllUsersInView = useCallback(async (viewId: string) => {
         const selected = views.find(v => v.id === viewId);
         if (selected) {
-            const result = await getSystemUsers(powerTools, selected.id, selected.type, undefined, true);
-            return result.users;
+            try {
+                const result = await getSystemUsers(powerTools, selected.id, selected.type, undefined, true);
+                return result.users;
+            } catch (error) {
+                if (process.env.NODE_ENV === 'development') {
+                    console.error('Failed to fetch all users in view:', error);
+                }
+                return [];
+            }
         }
         return [];
     }, [powerTools, views]);
 
     const clearViewSelection = useCallback(() => {
+        cleanup(); // Cancel any pending requests
+        
         setSelectedView(undefined);
         setColumns(defaultColumns);
         setLoading(true);
         resetPagination();
         setSearchText('');
-        getSystemUsers(powerTools).then(result => {
-            setUsers(result.users);
-            setHasMore(result.hasMore);
-            setNextLink(result.nextLink);
-        }).finally(() => setLoading(false));
-    }, [powerTools, defaultColumns, resetPagination]);
+        getSystemUsers(powerTools)
+            .then(result => {
+                setUsers(result.users);
+                setHasMore(result.hasMore);
+                setNextLink(result.nextLink);
+            })
+            .catch(error => {
+                if (process.env.NODE_ENV === 'development') {
+                    console.error('Failed to clear view selection:', error);
+                }
+                setUsers([]);
+            })
+            .finally(() => setLoading(false));
+    }, [powerTools, defaultColumns, resetPagination, cleanup]);
 
     return { 
         users, 

@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { message } from 'antd';
-import { ISystemUser } from '../models/systemUser';
+import { ISystemUser, getUserDisplayName } from '../models/systemUser';
 
 type FetchAllUsersInView = (viewId: string) => Promise<ISystemUser[]>;
 
@@ -22,12 +22,19 @@ export const useUserSelection = (
             setLoading(true);
             message.loading({ content: 'Fetching all users in view...', key: 'loading' });
 
-            const allUsers = await fetchAllUsersInView(selectedView);
-            const allUserKeys = allUsers.map(user => user.systemuserid);
-            setSelectedRowKeys(allUserKeys);
-
-            setLoading(false);
-            message.success({ content: `Selected ${allUserKeys.length} users from view.`, key: 'loading' });
+            try {
+                const allUsers = await fetchAllUsersInView(selectedView);
+                const allUserKeys = allUsers.map(user => user.systemuserid);
+                setSelectedRowKeys(allUserKeys);
+                message.success({ content: `Selected ${allUserKeys.length} users from view.`, key: 'loading' });
+            } catch (error) {
+                message.error({ content: 'Failed to fetch all users in view.', key: 'loading' });
+                if (process.env.NODE_ENV === 'development') {
+                    console.error('Error selecting all users in view:', error);
+                }
+            } finally {
+                setLoading(false);
+            }
         } else {
             // If no view is selected, select all users currently displayed
             const allUserKeys = users.map(user => user.systemuserid);
@@ -41,7 +48,7 @@ export const useUserSelection = (
         onChange: onSelectChange,
         getCheckboxProps: (record: ISystemUser) => ({
             disabled: record.isdisabled,
-            name: record.fullname,
+            name: getUserDisplayName(record),
         }),
         onSelectAll: handleSelectAll,
     };
