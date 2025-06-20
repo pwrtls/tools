@@ -15,7 +15,10 @@ export const useUsers = (views: IView[]) => {
     const powerTools = useContext(PowerToolsContext);
     const [users, setUsers] = useState<ISystemUser[]>([]);
     const [loading, setLoading] = useState(false);
+    const [loadingMore, setLoadingMore] = useState(false);
     const [selectedView, setSelectedView] = useState<string | undefined>();
+    const [hasMore, setHasMore] = useState(true);
+    const [nextLink, setNextLink] = useState<string | undefined>();
 
     const statusColumn = useMemo((): ColumnsType<ISystemUser>[0] => ({
         title: 'Status',
@@ -37,18 +40,47 @@ export const useUsers = (views: IView[]) => {
 
     const [columns, setColumns] = useState<ColumnsType<ISystemUser>>(defaultColumns);
 
+    const resetPagination = useCallback(() => {
+        setUsers([]);
+        setHasMore(true);
+        setNextLink(undefined);
+    }, []);
+
     useEffect(() => {
         if (powerTools.isLoaded) {
             setLoading(true);
+            resetPagination();
             getSystemUsers(powerTools)
-                .then(setUsers)
+                .then(result => {
+                    setUsers(result.users);
+                    setHasMore(result.hasMore);
+                    setNextLink(result.nextLink);
+                })
                 .finally(() => setLoading(false));
         }
-    }, [powerTools]);
+    }, [powerTools, resetPagination]);
+
+    const loadMoreUsers = useCallback(async () => {
+        if (!hasMore || loadingMore || !nextLink) return;
+
+        setLoadingMore(true);
+        try {
+            const result = await getSystemUsers(powerTools, undefined, undefined, undefined, false, columns, nextLink);
+            setUsers(prev => [...prev, ...result.users]);
+            setHasMore(result.hasMore);
+            setNextLink(result.nextLink);
+        } catch (error) {
+            console.error('Failed to load more users:', error);
+        } finally {
+            setLoadingMore(false);
+        }
+    }, [powerTools, hasMore, loadingMore, nextLink, columns]);
 
     const handleViewChange = useCallback((viewId: string) => {
         setLoading(true);
         setSelectedView(viewId);
+        resetPagination();
+        
         const selected = views.find(v => v.id === viewId);
         if (!selected) {
             setLoading(false);
@@ -57,8 +89,10 @@ export const useUsers = (views: IView[]) => {
             return;
         }
 
-        getSystemUsers(powerTools, viewId, selected.type, undefined, false).then(users => {
-            setUsers(users);
+        getSystemUsers(powerTools, viewId, selected.type, undefined, false, columns).then(result => {
+            setUsers(result.users);
+            setHasMore(result.hasMore);
+            setNextLink(result.nextLink);
             if (selected) {
                 const parser = new XMLParser({ ignoreAttributes: false });
                 const layout = parser.parse(selected.layoutxml);
@@ -75,35 +109,42 @@ export const useUsers = (views: IView[]) => {
             }
             setLoading(false);
         });
-    }, [powerTools, views, statusColumn, defaultColumns]);
+    }, [powerTools, views, statusColumn, defaultColumns, columns, resetPagination]);
 
     const handleSearch = useCallback((value: string) => {
         setLoading(true);
+        resetPagination();
+        
         if (selectedView) {
             // Search within the current view using the current columns
             const selected = views.find(v => v.id === selectedView);
             if (selected) {
                 getSystemUsers(powerTools, selected.id, selected.type, value, false, columns)
-                    .then(users => {
-                        setUsers(users);
+                    .then(result => {
+                        setUsers(result.users);
+                        setHasMore(result.hasMore);
+                        setNextLink(result.nextLink);
                     })
                     .finally(() => setLoading(false));
             }
         } else {
             // Global search when no view is selected
             getSystemUsers(powerTools, undefined, undefined, value, false, columns)
-                .then(users => {
-                    setUsers(users);
+                .then(result => {
+                    setUsers(result.users);
+                    setHasMore(result.hasMore);
+                    setNextLink(result.nextLink);
                     setColumns(defaultColumns);
                 })
                 .finally(() => setLoading(false));
         }
-    }, [powerTools, selectedView, views, defaultColumns, columns]);
+    }, [powerTools, selectedView, views, defaultColumns, columns, resetPagination]);
 
     const fetchAllUsersInView = useCallback(async (viewId: string) => {
         const selected = views.find(v => v.id === viewId);
         if (selected) {
-            return await getSystemUsers(powerTools, selected.id, selected.type, undefined, true);
+            const result = await getSystemUsers(powerTools, selected.id, selected.type, undefined, true);
+            return result.users;
         }
         return [];
     }, [powerTools, views]);
@@ -112,8 +153,25 @@ export const useUsers = (views: IView[]) => {
         setSelectedView(undefined);
         setColumns(defaultColumns);
         setLoading(true);
-        getSystemUsers(powerTools).then(setUsers).finally(() => setLoading(false));
-    }, [powerTools, defaultColumns]);
+        resetPagination();
+        getSystemUsers(powerTools).then(result => {
+            setUsers(result.users);
+            setHasMore(result.hasMore);
+            setNextLink(result.nextLink);
+        }).finally(() => setLoading(false));
+    }, [powerTools, defaultColumns, resetPagination]);
 
-    return { users, columns, loading, selectedView, handleViewChange, handleSearch, fetchAllUsersInView, clearViewSelection };
+    return { 
+        users, 
+        columns, 
+        loading, 
+        loadingMore,
+        hasMore,
+        selectedView, 
+        handleViewChange, 
+        handleSearch, 
+        fetchAllUsersInView, 
+        clearViewSelection,
+        loadMoreUsers
+    };
 }; 

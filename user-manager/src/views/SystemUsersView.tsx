@@ -16,11 +16,14 @@ export const SystemUsersView = () => {
         users,
         columns,
         loading: usersLoading,
+        loadingMore,
+        hasMore,
         selectedView,
         handleViewChange,
         handleSearch,
         fetchAllUsersInView,
-        clearViewSelection
+        clearViewSelection,
+        loadMoreUsers
     } = useUsers(views);
     const { roles, loading: rolesLoading, loadRoles, hasLoaded } = useRoles();
     const { selectedRowKeys, setSelectedRowKeys, rowSelection } = useUserSelection(users, selectedView, fetchAllUsersInView);
@@ -63,9 +66,12 @@ export const SystemUsersView = () => {
             />
             <UserTable
                 loading={usersLoading}
+                loadingMore={loadingMore}
+                hasMore={hasMore}
                 users={users}
                 columns={columns}
                 rowSelection={rowSelection}
+                onLoadMore={loadMoreUsers}
             />
             <AssignRolesModal
                 visible={isModalVisible}

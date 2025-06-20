@@ -2,16 +2,23 @@ import { ISystemUser } from "../models/systemUser";
 import { PowerTools } from "../powertools/context";
 import { ColumnsType } from "antd/es/table";
 
+interface PaginatedResult {
+    users: ISystemUser[];
+    hasMore: boolean;
+    nextLink?: string;
+}
+
 export const getSystemUsers = async (
     powerTools: PowerTools, 
     viewId?: string, 
     viewType?: 'system' | 'personal', 
     search?: string, 
     fetchAll: boolean = false,
-    columns?: ColumnsType<ISystemUser>
-): Promise<ISystemUser[]> => {
+    columns?: ColumnsType<ISystemUser>,
+    nextLink?: string
+): Promise<PaginatedResult> => {
     if (!powerTools.get) {
-        return [];
+        return { users: [], hasMore: false };
     }
 
     let url = `/api/data/v9.2/systemusers`;
@@ -47,6 +54,15 @@ export const getSystemUsers = async (
         }
     }
 
+    // Add pagination
+    if (!fetchAll) {
+        url += url.includes('?') ? '&' : '?';
+        url += '$top=50'; // Load 50 records per page
+        if (nextLink) {
+            url = nextLink;
+        }
+    }
+
     if (fetchAll) {
         let queryUrl = url;
 
@@ -73,11 +89,15 @@ export const getSystemUsers = async (
 
         } while (queryUrl);
 
-        return allUsers;
+        return { users: allUsers, hasMore: false };
     } else {
         const result = await powerTools.get(url);
-        const jsonResult = await result.asJson<{ value: ISystemUser[] }>();
-        return jsonResult?.value || [];
+        const jsonResult = await result.asJson<{ value: ISystemUser[]; "@odata.nextLink"?: string }>();
+        const users = jsonResult?.value || [];
+        const hasMore = !!jsonResult?.["@odata.nextLink"];
+        const nextLink = jsonResult?.["@odata.nextLink"];
+        
+        return { users, hasMore, nextLink };
     }
 };
 
