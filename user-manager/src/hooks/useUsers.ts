@@ -41,11 +41,12 @@ export const useUsers = (views: IView[]) => {
     // Performance: Debounce search input
     const debouncedSearchText = useDebounce(searchText, 300);
     
-    // Performance: Memoize XML parser to avoid recreating
+    // Performance: Memoize XML parser to avoid recreation
     const xmlParser = useMemo(() => new XMLParser({ ignoreAttributes: false }), []);
     
-    // Performance: Use ref to track cleanup
+    // BUG FIX: Properly initialize and track cancellation
     const abortControllerRef = useRef<AbortController | null>(null);
+    const timeoutIdsRef = useRef<Set<NodeJS.Timeout>>(new Set());
 
     const statusColumn = useMemo((): ColumnsType<ISystemUser>[0] => ({
         title: 'Status',
@@ -74,12 +75,32 @@ export const useUsers = (views: IView[]) => {
         setNextLink(undefined);
     }, []);
 
-    // Performance: Cleanup function
+    // BUG FIX: Enhanced cleanup function with timeout cancellation
     const cleanup = useCallback(() => {
+        // Cancel pending HTTP requests
         if (abortControllerRef.current) {
             abortControllerRef.current.abort();
             abortControllerRef.current = null;
         }
+        
+        // Cancel all pending timeouts (XML parsing)
+        timeoutIdsRef.current.forEach(timeoutId => {
+            clearTimeout(timeoutId);
+        });
+        timeoutIdsRef.current.clear();
+    }, []);
+
+    // BUG FIX: Create new AbortController for each request
+    const createAbortController = useCallback(() => {
+        // Clean up previous controller
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+        }
+        
+        // Create new controller
+        const controller = new AbortController();
+        abortControllerRef.current = controller;
+        return controller;
     }, []);
 
     // Performance: Effect cleanup on unmount
@@ -89,47 +110,73 @@ export const useUsers = (views: IView[]) => {
 
     useEffect(() => {
         if (powerTools.isLoaded) {
+            const controller = createAbortController();
             setLoading(true);
             resetPagination();
             setSearchText('');
-            getSystemUsers(powerTools)
+            
+            getSystemUsers(powerTools, undefined, undefined, undefined, false, undefined, undefined, controller.signal)
                 .then(result => {
-                    setUsers(result.users);
-                    setHasMore(result.hasMore);
-                    setNextLink(result.nextLink);
+                    // Only update state if this request wasn't cancelled
+                    if (!controller.signal.aborted) {
+                        setUsers(result.users);
+                        setHasMore(result.hasMore);
+                        setNextLink(result.nextLink);
+                    }
                 })
                 .catch(error => {
-                    if (process.env.NODE_ENV === 'development') {
-                        console.error('Failed to load initial users:', error);
+                    // Only handle error if not cancelled
+                    if (!controller.signal.aborted) {
+                        if (process.env.NODE_ENV === 'development') {
+                            console.error('Failed to load initial users:', error);
+                        }
+                        setUsers([]);
                     }
-                    setUsers([]);
                 })
-                .finally(() => setLoading(false));
+                .finally(() => {
+                    // Only update loading state if not cancelled
+                    if (!controller.signal.aborted) {
+                        setLoading(false);
+                    }
+                });
         }
-    }, [powerTools, resetPagination]);
+    }, [powerTools, resetPagination, createAbortController]);
 
     const loadMoreUsers = useCallback(async () => {
         if (!hasMore || loadingMore || !nextLink) return;
 
+        const controller = createAbortController();
         setLoadingMore(true);
+        
         try {
             const viewType = selectedView ? views.find(v => v.id === selectedView)?.type : undefined;
-            const result = await getSystemUsers(powerTools, selectedView, viewType, debouncedSearchText, false, columns, nextLink);
-            setUsers(prev => [...prev, ...result.users]);
-            setHasMore(result.hasMore);
-            setNextLink(result.nextLink);
+            const result = await getSystemUsers(powerTools, selectedView, viewType, debouncedSearchText, false, columns, nextLink, controller.signal);
+            
+            // Only update state if request wasn't cancelled
+            if (!controller.signal.aborted) {
+                setUsers(prev => [...prev, ...result.users]);
+                setHasMore(result.hasMore);
+                setNextLink(result.nextLink);
+            }
         } catch (error) {
-            if (process.env.NODE_ENV === 'development') {
-                console.error('Failed to load more users:', error);
+            // Only handle error if not cancelled
+            if (!controller.signal.aborted) {
+                if (process.env.NODE_ENV === 'development') {
+                    console.error('Failed to load more users:', error);
+                }
             }
         } finally {
-            setLoadingMore(false);
+            // Only update loading state if not cancelled
+            if (!controller.signal.aborted) {
+                setLoadingMore(false);
+            }
         }
-    }, [powerTools, hasMore, loadingMore, nextLink, columns, selectedView, debouncedSearchText, views]);
+    }, [powerTools, hasMore, loadingMore, nextLink, columns, selectedView, debouncedSearchText, views, createAbortController]);
 
     const handleViewChange = useCallback((viewId: string) => {
-        cleanup(); // Cancel any pending requests
+        cleanup(); // Cancel any pending requests and timeouts
         
+        const controller = createAbortController();
         setLoading(true);
         setSelectedView(viewId);
         resetPagination();
@@ -143,55 +190,76 @@ export const useUsers = (views: IView[]) => {
             return;
         }
 
-        getSystemUsers(powerTools, viewId, selected.type, undefined, false, columns)
+        getSystemUsers(powerTools, viewId, selected.type, undefined, false, columns, undefined, controller.signal)
             .then(result => {
-                setUsers(result.users);
-                setHasMore(result.hasMore);
-                setNextLink(result.nextLink);
-                if (selected?.layoutxml) {
-                    try {
-                        // Performance: Parse XML asynchronously using setTimeout
-                        setTimeout(() => {
-                            try {
-                                const layout = xmlParser.parse(selected.layoutxml);
-                                const cells = layout.grid.row.cell;
-                                let newColumns = cells.map((cell: any) => ({
-                                    title: formatColumnTitle(cell['@_name']),
-                                    dataIndex: cell['@_name'],
-                                    key: cell['@_name'],
-                                    onHeaderCell: () => ({ style: { whiteSpace: 'nowrap' } }),
-                                }));
-                                if (!newColumns.some((col: any) => col.key === 'isdisabled')) {
-                                    newColumns = [statusColumn, ...newColumns];
+                // Only proceed if request wasn't cancelled
+                if (!controller.signal.aborted) {
+                    setUsers(result.users);
+                    setHasMore(result.hasMore);
+                    setNextLink(result.nextLink);
+                    
+                    if (selected?.layoutxml) {
+                        try {
+                            // BUG FIX: Track timeout and cancel if component unmounts
+                            const timeoutId = setTimeout(() => {
+                                // Remove this timeout from tracking
+                                timeoutIdsRef.current.delete(timeoutId);
+                                
+                                // Only update columns if request is still valid
+                                if (!controller.signal.aborted) {
+                                    try {
+                                        const layout = xmlParser.parse(selected.layoutxml);
+                                        const cells = layout.grid.row.cell;
+                                        let newColumns = cells.map((cell: any) => ({
+                                            title: formatColumnTitle(cell['@_name']),
+                                            dataIndex: cell['@_name'],
+                                            key: cell['@_name'],
+                                            onHeaderCell: () => ({ style: { whiteSpace: 'nowrap' } }),
+                                        }));
+                                        if (!newColumns.some((col: any) => col.key === 'isdisabled')) {
+                                            newColumns = [statusColumn, ...newColumns];
+                                        }
+                                        setColumns(newColumns);
+                                    } catch (parseError) {
+                                        if (process.env.NODE_ENV === 'development') {
+                                            console.error('Failed to parse view layout XML:', parseError);
+                                        }
+                                        setColumns(defaultColumns);
+                                    }
                                 }
-                                setColumns(newColumns);
-                            } catch (parseError) {
-                                if (process.env.NODE_ENV === 'development') {
-                                    console.error('Failed to parse view layout XML:', parseError);
-                                }
-                                setColumns(defaultColumns);
+                            }, 0);
+                            
+                            // Track timeout for cleanup
+                            timeoutIdsRef.current.add(timeoutId);
+                        } catch (error) {
+                            if (process.env.NODE_ENV === 'development') {
+                                console.error('Failed to process view layout:', error);
                             }
-                        }, 0);
-                    } catch (error) {
-                        if (process.env.NODE_ENV === 'development') {
-                            console.error('Failed to process view layout:', error);
+                            setColumns(defaultColumns);
                         }
-                        setColumns(defaultColumns);
                     }
                 }
             })
             .catch(error => {
-                if (process.env.NODE_ENV === 'development') {
-                    console.error('Failed to load view data:', error);
+                // Only handle error if not cancelled
+                if (!controller.signal.aborted) {
+                    if (process.env.NODE_ENV === 'development') {
+                        console.error('Failed to load view data:', error);
+                    }
+                    setUsers([]);
                 }
-                setUsers([]);
             })
-            .finally(() => setLoading(false));
-    }, [powerTools, views, statusColumn, defaultColumns, columns, resetPagination, cleanup, xmlParser]);
+            .finally(() => {
+                // Only update loading state if not cancelled
+                if (!controller.signal.aborted) {
+                    setLoading(false);
+                }
+            });
+    }, [powerTools, views, statusColumn, defaultColumns, columns, resetPagination, cleanup, xmlParser, createAbortController]);
 
     // Performance: Search effect with debouncing
     useEffect(() => {
-        cleanup(); // Cancel any pending requests
+        const controller = createAbortController();
         setLoading(true);
         resetPagination();
         
@@ -202,38 +270,54 @@ export const useUsers = (views: IView[]) => {
                 // Restore view users when search is cleared
                 const selected = views.find(v => v.id === selectedView);
                 if (selected) {
-                    getSystemUsers(powerTools, selected.id, selected.type, undefined, false, columns)
+                    getSystemUsers(powerTools, selected.id, selected.type, undefined, false, columns, undefined, controller.signal)
                         .then(result => {
-                            setUsers(result.users);
-                            setHasMore(result.hasMore);
-                            setNextLink(result.nextLink);
+                            if (!controller.signal.aborted) {
+                                setUsers(result.users);
+                                setHasMore(result.hasMore);
+                                setNextLink(result.nextLink);
+                            }
                         })
                         .catch(error => {
-                            if (process.env.NODE_ENV === 'development') {
-                                console.error('Failed to restore view users:', error);
+                            if (!controller.signal.aborted) {
+                                if (process.env.NODE_ENV === 'development') {
+                                    console.error('Failed to restore view users:', error);
+                                }
+                                setUsers([]);
                             }
-                            setUsers([]);
                         })
-                        .finally(() => setLoading(false));
+                        .finally(() => {
+                            if (!controller.signal.aborted) {
+                                setLoading(false);
+                            }
+                        });
                 } else {
                     setLoading(false);
                 }
             } else {
                 // Restore all users when no view is selected and search is cleared
-                getSystemUsers(powerTools, undefined, undefined, undefined, false, defaultColumns)
+                getSystemUsers(powerTools, undefined, undefined, undefined, false, defaultColumns, undefined, controller.signal)
                     .then(result => {
-                        setUsers(result.users);
-                        setHasMore(result.hasMore);
-                        setNextLink(result.nextLink);
-                        setColumns(defaultColumns);
+                        if (!controller.signal.aborted) {
+                            setUsers(result.users);
+                            setHasMore(result.hasMore);
+                            setNextLink(result.nextLink);
+                            setColumns(defaultColumns);
+                        }
                     })
                     .catch(error => {
-                        if (process.env.NODE_ENV === 'development') {
-                            console.error('Failed to restore all users:', error);
+                        if (!controller.signal.aborted) {
+                            if (process.env.NODE_ENV === 'development') {
+                                console.error('Failed to restore all users:', error);
+                            }
+                            setUsers([]);
                         }
-                        setUsers([]);
                     })
-                    .finally(() => setLoading(false));
+                    .finally(() => {
+                        if (!controller.signal.aborted) {
+                            setLoading(false);
+                        }
+                    });
             }
             return;
         }
@@ -243,40 +327,56 @@ export const useUsers = (views: IView[]) => {
             // Search within the current view using the current columns
             const selected = views.find(v => v.id === selectedView);
             if (selected) {
-                getSystemUsers(powerTools, selected.id, selected.type, debouncedSearchText, false, columns)
+                getSystemUsers(powerTools, selected.id, selected.type, debouncedSearchText, false, columns, undefined, controller.signal)
                     .then(result => {
-                        setUsers(result.users);
-                        setHasMore(result.hasMore);
-                        setNextLink(result.nextLink);
+                        if (!controller.signal.aborted) {
+                            setUsers(result.users);
+                            setHasMore(result.hasMore);
+                            setNextLink(result.nextLink);
+                        }
                     })
                     .catch(error => {
-                        if (process.env.NODE_ENV === 'development') {
-                            console.error('Failed to search in view:', error);
+                        if (!controller.signal.aborted) {
+                            if (process.env.NODE_ENV === 'development') {
+                                console.error('Failed to search in view:', error);
+                            }
+                            setUsers([]);
                         }
-                        setUsers([]);
                     })
-                    .finally(() => setLoading(false));
+                    .finally(() => {
+                        if (!controller.signal.aborted) {
+                            setLoading(false);
+                        }
+                    });
             } else {
                 setLoading(false);
             }
         } else {
             // Global search when no view is selected
-            getSystemUsers(powerTools, undefined, undefined, debouncedSearchText, false, columns)
+            getSystemUsers(powerTools, undefined, undefined, debouncedSearchText, false, columns, undefined, controller.signal)
                 .then(result => {
-                    setUsers(result.users);
-                    setHasMore(result.hasMore);
-                    setNextLink(result.nextLink);
-                    setColumns(defaultColumns);
+                    if (!controller.signal.aborted) {
+                        setUsers(result.users);
+                        setHasMore(result.hasMore);
+                        setNextLink(result.nextLink);
+                        setColumns(defaultColumns);
+                    }
                 })
                 .catch(error => {
-                    if (process.env.NODE_ENV === 'development') {
-                        console.error('Failed to perform global search:', error);
+                    if (!controller.signal.aborted) {
+                        if (process.env.NODE_ENV === 'development') {
+                            console.error('Failed to perform global search:', error);
+                        }
+                        setUsers([]);
                     }
-                    setUsers([]);
                 })
-                .finally(() => setLoading(false));
+                .finally(() => {
+                    if (!controller.signal.aborted) {
+                        setLoading(false);
+                    }
+                });
         }
-    }, [debouncedSearchText, powerTools, selectedView, views, defaultColumns, columns, resetPagination, cleanup]);
+    }, [debouncedSearchText, powerTools, selectedView, views, defaultColumns, columns, resetPagination, createAbortController]);
 
     const handleSearch = useCallback((value: string) => {
         setSearchText(value);
@@ -286,8 +386,9 @@ export const useUsers = (views: IView[]) => {
         const selected = views.find(v => v.id === viewId);
         if (selected) {
             try {
-                const result = await getSystemUsers(powerTools, selected.id, selected.type, undefined, true);
-                return result.users;
+                const controller = createAbortController();
+                const result = await getSystemUsers(powerTools, selected.id, selected.type, undefined, true, undefined, undefined, controller.signal);
+                return controller.signal.aborted ? [] : result.users;
             } catch (error) {
                 if (process.env.NODE_ENV === 'development') {
                     console.error('Failed to fetch all users in view:', error);
@@ -296,30 +397,40 @@ export const useUsers = (views: IView[]) => {
             }
         }
         return [];
-    }, [powerTools, views]);
+    }, [powerTools, views, createAbortController]);
 
     const clearViewSelection = useCallback(() => {
-        cleanup(); // Cancel any pending requests
+        cleanup(); // Cancel any pending requests and timeouts
         
+        const controller = createAbortController();
         setSelectedView(undefined);
         setColumns(defaultColumns);
         setLoading(true);
         resetPagination();
         setSearchText('');
-        getSystemUsers(powerTools)
+        
+        getSystemUsers(powerTools, undefined, undefined, undefined, false, undefined, undefined, controller.signal)
             .then(result => {
-                setUsers(result.users);
-                setHasMore(result.hasMore);
-                setNextLink(result.nextLink);
+                if (!controller.signal.aborted) {
+                    setUsers(result.users);
+                    setHasMore(result.hasMore);
+                    setNextLink(result.nextLink);
+                }
             })
             .catch(error => {
-                if (process.env.NODE_ENV === 'development') {
-                    console.error('Failed to clear view selection:', error);
+                if (!controller.signal.aborted) {
+                    if (process.env.NODE_ENV === 'development') {
+                        console.error('Failed to clear view selection:', error);
+                    }
+                    setUsers([]);
                 }
-                setUsers([]);
             })
-            .finally(() => setLoading(false));
-    }, [powerTools, defaultColumns, resetPagination, cleanup]);
+            .finally(() => {
+                if (!controller.signal.aborted) {
+                    setLoading(false);
+                }
+            });
+    }, [powerTools, defaultColumns, resetPagination, cleanup, createAbortController]);
 
     return { 
         users, 

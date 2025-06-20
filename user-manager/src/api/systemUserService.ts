@@ -41,10 +41,16 @@ export const getSystemUsers = async (
     search?: string, 
     fetchAll: boolean = false,
     columns?: ColumnsType<ISystemUser>,
-    nextLink?: string
+    nextLink?: string,
+    abortSignal?: AbortSignal // Added for request cancellation
 ): Promise<PaginatedResult> => {
     if (!powerTools.get) {
         return { users: [], hasMore: false };
+    }
+
+    // Check if request was cancelled before starting
+    if (abortSignal?.aborted) {
+        throw new Error('Request cancelled');
     }
 
     let url = `/api/data/v9.2/systemusers`;
@@ -103,6 +109,11 @@ export const getSystemUsers = async (
         let queryUrl = url;
 
         do {
+            // Check if request was cancelled during loop
+            if (abortSignal?.aborted) {
+                throw new Error('Request cancelled');
+            }
+
             const result = await powerTools.get(queryUrl);
             const jsonResult = await result.asJson<{ value: ISystemUser[]; "@odata.nextLink"?: string }>();
             
@@ -129,6 +140,11 @@ export const getSystemUsers = async (
 
         return { users: allUsers, hasMore: false };
     } else {
+        // Check if request was cancelled before final request
+        if (abortSignal?.aborted) {
+            throw new Error('Request cancelled');
+        }
+
         const result = await powerTools.get(url);
         const jsonResult = await result.asJson<{ value: ISystemUser[]; "@odata.nextLink"?: string }>();
         const users = jsonResult?.value || [];
