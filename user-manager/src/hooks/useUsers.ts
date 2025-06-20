@@ -44,8 +44,10 @@ export const useUsers = (views: IView[]) => {
     // Performance: Memoize XML parser to avoid recreation
     const xmlParser = useMemo(() => new XMLParser({ ignoreAttributes: false }), []);
     
-    // BUG FIX: Properly initialize and track cancellation
-    const abortControllerRef = useRef<AbortController | null>(null);
+    // BUG FIX: Separate AbortController management for different operation types
+    const mainAbortControllerRef = useRef<AbortController | null>(null);  // For primary operations (search, view change, initial load)
+    const loadMoreAbortControllerRef = useRef<AbortController | null>(null);  // For load more operations
+    const independentOperationsRef = useRef<Map<string, AbortController>>(new Map());  // For independent operations
     const timeoutIdsRef = useRef<Set<NodeJS.Timeout>>(new Set());
 
     const statusColumn = useMemo((): ColumnsType<ISystemUser>[0] => ({
@@ -75,13 +77,25 @@ export const useUsers = (views: IView[]) => {
         setNextLink(undefined);
     }, []);
 
-    // BUG FIX: Enhanced cleanup function with timeout cancellation
+    // BUG FIX: Enhanced cleanup function with separate controller management
     const cleanup = useCallback(() => {
-        // Cancel pending HTTP requests
-        if (abortControllerRef.current) {
-            abortControllerRef.current.abort();
-            abortControllerRef.current = null;
+        // Cancel main operations (search, view changes, etc.)
+        if (mainAbortControllerRef.current) {
+            mainAbortControllerRef.current.abort();
+            mainAbortControllerRef.current = null;
         }
+        
+        // Cancel load more operations
+        if (loadMoreAbortControllerRef.current) {
+            loadMoreAbortControllerRef.current.abort();
+            loadMoreAbortControllerRef.current = null;
+        }
+        
+        // Cancel all independent operations
+        independentOperationsRef.current.forEach(controller => {
+            controller.abort();
+        });
+        independentOperationsRef.current.clear();
         
         // Cancel all pending timeouts (XML parsing)
         timeoutIdsRef.current.forEach(timeoutId => {
@@ -90,16 +104,54 @@ export const useUsers = (views: IView[]) => {
         timeoutIdsRef.current.clear();
     }, []);
 
-    // BUG FIX: Create new AbortController for each request
-    const createAbortController = useCallback(() => {
-        // Clean up previous controller
-        if (abortControllerRef.current) {
-            abortControllerRef.current.abort();
+    // BUG FIX: Create AbortController for main operations (cancels previous main operations)
+    const createMainAbortController = useCallback(() => {
+        // Clean up previous main controller
+        if (mainAbortControllerRef.current) {
+            mainAbortControllerRef.current.abort();
         }
         
-        // Create new controller
+        // Create new controller for main operations
         const controller = new AbortController();
-        abortControllerRef.current = controller;
+        mainAbortControllerRef.current = controller;
+        return controller;
+    }, []);
+
+    // BUG FIX: Create AbortController for load more operations (independent of main operations)
+    const createLoadMoreAbortController = useCallback(() => {
+        // Clean up previous load more controller
+        if (loadMoreAbortControllerRef.current) {
+            loadMoreAbortControllerRef.current.abort();
+        }
+        
+        // Create new controller for load more operations
+        const controller = new AbortController();
+        loadMoreAbortControllerRef.current = controller;
+        return controller;
+    }, []);
+
+    // BUG FIX: Create AbortController for independent operations (doesn't interfere with anything)
+    const createIndependentAbortController = useCallback((operationId: string) => {
+        // Clean up any existing controller for this operation
+        const existingController = independentOperationsRef.current.get(operationId);
+        if (existingController) {
+            existingController.abort();
+        }
+        
+        // Create new controller for this specific operation
+        const controller = new AbortController();
+        independentOperationsRef.current.set(operationId, controller);
+        
+        // Clean up when operation completes
+        const originalSignal = controller.signal;
+        const cleanup = () => {
+            independentOperationsRef.current.delete(operationId);
+        };
+        
+        if (!originalSignal.aborted) {
+            originalSignal.addEventListener('abort', cleanup, { once: true });
+        }
+        
         return controller;
     }, []);
 
@@ -198,7 +250,7 @@ export const useUsers = (views: IView[]) => {
 
     useEffect(() => {
         if (powerTools.isLoaded) {
-            const controller = createAbortController();
+            const controller = createMainAbortController();
             setLoading(true);
             resetPagination();
             setSearchText('');
@@ -228,12 +280,13 @@ export const useUsers = (views: IView[]) => {
                     }
                 });
         }
-    }, [powerTools, resetPagination, createAbortController]);
+    }, [powerTools, resetPagination, createMainAbortController]);
 
+    // BUG FIX: Load more uses independent controller (doesn't interfere with main operations)
     const loadMoreUsers = useCallback(async () => {
         if (!hasMore || loadingMore || !nextLink) return;
 
-        const controller = createAbortController();
+        const controller = createLoadMoreAbortController();
         setLoadingMore(true);
         
         try {
@@ -259,12 +312,12 @@ export const useUsers = (views: IView[]) => {
                 setLoadingMore(false);
             }
         }
-    }, [powerTools, hasMore, loadingMore, nextLink, columns, selectedView, debouncedSearchText, views, createAbortController]);
+    }, [powerTools, hasMore, loadingMore, nextLink, columns, selectedView, debouncedSearchText, views, createLoadMoreAbortController]);
 
     const handleViewChange = useCallback((viewId: string) => {
         cleanup(); // Cancel any pending requests and timeouts
         
-        const controller = createAbortController();
+        const controller = createMainAbortController();
         setLoading(true);
         setSelectedView(viewId);
         resetPagination();
@@ -343,11 +396,11 @@ export const useUsers = (views: IView[]) => {
                     setLoading(false);
                 }
             });
-    }, [powerTools, views, statusColumn, defaultColumns, columns, resetPagination, cleanup, xmlParser, createAbortController]);
+    }, [powerTools, views, statusColumn, defaultColumns, columns, resetPagination, cleanup, xmlParser, createMainAbortController]);
 
-    // REFACTOR: Simplified and more readable search effect
+    // REFACTOR: Simplified and more readable search effect (uses main controller)
     useEffect(() => {
-        const controller = createAbortController();
+        const controller = createMainAbortController();
         setLoading(true);
         resetPagination();
         
@@ -367,17 +420,19 @@ export const useUsers = (views: IView[]) => {
         } else {
             searchGlobally(controller, debouncedSearchText);
         }
-    }, [debouncedSearchText, selectedView, restoreViewUsers, restoreAllUsers, searchInView, searchGlobally, resetPagination, createAbortController]);
+    }, [debouncedSearchText, selectedView, restoreViewUsers, restoreAllUsers, searchInView, searchGlobally, resetPagination, createMainAbortController]);
 
     const handleSearch = useCallback((value: string) => {
         setSearchText(value);
     }, []);
 
+    // BUG FIX: fetchAllUsersInView uses independent controller (doesn't interfere with main operations)
     const fetchAllUsersInView = useCallback(async (viewId: string) => {
         const selected = views.find(v => v.id === viewId);
         if (selected) {
             try {
-                const controller = createAbortController();
+                const operationId = `fetchAllUsersInView-${viewId}-${Date.now()}`;
+                const controller = createIndependentAbortController(operationId);
                 const result = await getSystemUsers(powerTools, selected.id, selected.type, undefined, true, undefined, undefined, controller.signal);
                 return controller.signal.aborted ? [] : result.users;
             } catch (error) {
@@ -388,12 +443,12 @@ export const useUsers = (views: IView[]) => {
             }
         }
         return [];
-    }, [powerTools, views, createAbortController]);
+    }, [powerTools, views, createIndependentAbortController]);
 
     const clearViewSelection = useCallback(() => {
         cleanup(); // Cancel any pending requests and timeouts
         
-        const controller = createAbortController();
+        const controller = createMainAbortController();
         setSelectedView(undefined);
         setColumns(defaultColumns);
         setLoading(true);
@@ -421,7 +476,7 @@ export const useUsers = (views: IView[]) => {
                     setLoading(false);
                 }
             });
-    }, [powerTools, defaultColumns, resetPagination, cleanup, createAbortController]);
+    }, [powerTools, defaultColumns, resetPagination, cleanup, createMainAbortController]);
 
     return { 
         users, 
