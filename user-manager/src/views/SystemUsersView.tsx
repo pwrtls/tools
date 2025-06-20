@@ -25,15 +25,11 @@ export const SystemUsersView = () => {
         clearViewSelection,
         loadMoreUsers
     } = useUsers(views);
-    const { roles, loading: rolesLoading, loadRoles, hasLoaded } = useRoles();
+    const { roles, loading: rolesLoading } = useRoles();
     const { selectedRowKeys, setSelectedRowKeys, rowSelection } = useUserSelection(users, selectedView, fetchAllUsersInView);
     const [isModalVisible, setIsModalVisible] = useState(false);
 
-    const handleAssignRolesClick = async () => {
-        // Load roles if not already loaded
-        if (!hasLoaded) {
-            await loadRoles();
-        }
+    const handleAssignRolesClick = () => {
         setIsModalVisible(true);
     };
 
