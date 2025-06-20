@@ -3,5 +3,6 @@ export interface ISystemUser {
   fullname: string;
   internalemailaddress: string;
   domainname: string;
+  isdisabled: boolean;
   [key: string]: any;
 } 

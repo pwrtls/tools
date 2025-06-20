@@ -34,24 +34,30 @@ export const getRoles = async (powerTools: PowerTools): Promise<IRole[]> => {
 };
 
 export const assignRolesToUser = async (powerTools: PowerTools, userId: string, roleIds: string[]): Promise<void> => {
-    if (!powerTools.post) {
+    if (!powerTools.post || !powerTools.connectionName) {
         return;
     }
 
     const errors = [];
 
     for (const roleId of roleIds) {
+        const connection = powerTools.connectionName.replace(/\s/g, '');
+        const odataId = `https://${connection}.api.crm.dynamics.com/api/data/v9.2/roles(${roleId})`;
+        
         const payload = {
-            "@odata.id": `/api/data/v9.2/roles(${roleId})`
+            "@odata.id": odataId
         };
 
         try {
-            const result = await powerTools.post(`/api/data/v9.2/systemusers(${userId})/systemuserroles_association/$ref`, payload);
+            const headers = { 'Content-Type': 'application/json' };
+            const result = await powerTools.post(`/api/data/v9.2/systemusers(${userId})/systemuserroles_association/$ref`, payload, headers);
             if (result.statusCode < 200 || result.statusCode >= 300) {
-                errors.push(`Failed to assign role ${roleId} to user ${userId}: ${result.content}`);
+                const errorMessage = `Failed to assign role ${roleId} to user ${userId}: ${result.statusCode} - ${result.content}`;
+                errors.push(errorMessage);
             }
         } catch (error) {
-            errors.push(`Exception assigning role ${roleId} to user ${userId}: ${error}`);
+            const exceptionMessage = `Exception assigning role ${roleId} to user ${userId}: ${error}`;
+            errors.push(exceptionMessage);
         }
     }
 

@@ -16,7 +16,7 @@ export const getSystemUsers = async (powerTools: PowerTools, viewId?: string, vi
             url += `?userQuery=${viewId}`;
         }
     } else {
-        let select = `?$select=fullname,internalemailaddress,domainname`;
+        let select = `?$select=fullname,internalemailaddress,domainname,isdisabled`;
         if (fetchAll) {
             select = `?$select=systemuserid`;
         }
