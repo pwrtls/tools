@@ -1,6 +1,6 @@
 import { useState, useEffect, useContext, useMemo } from 'react';
 import { IView } from '../models/view';
-import { getViewsForEntity } from '../api/viewService';
+import { getViews } from '../api/viewService';
 import { PowerToolsContext } from '../powertools/context';
 
 export const useViews = () => {
@@ -11,8 +11,14 @@ export const useViews = () => {
     useEffect(() => {
         if (powerTools.isLoaded) {
             setLoading(true);
-            getViewsForEntity(powerTools, 'systemuser')
+            getViews(powerTools, 'systemuser')
                 .then(setViews)
+                .catch(error => {
+                    if (process.env.NODE_ENV === 'development') {
+                        console.error('Failed to load views:', error);
+                    }
+                    setViews([]);
+                })
                 .finally(() => setLoading(false));
         }
     }, [powerTools]);

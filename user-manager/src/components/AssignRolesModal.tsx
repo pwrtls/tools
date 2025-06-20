@@ -40,7 +40,7 @@ export const AssignRolesModal = ({ visible, onClose, roles, selectedRowKeys, onA
             try {
                 await assignRolesToUser(powerTools, userId as string, selectedRoles);
             } catch (error: any) {
-                failedAssignments.push({ userId, error: error.message });
+                failedAssignments.push({ userId, error: error.message || 'Unknown error' });
             }
             setAssignmentProgress(Math.round(((i + 1) / totalUsers) * 100));
         }
@@ -55,7 +55,11 @@ export const AssignRolesModal = ({ visible, onClose, roles, selectedRowKeys, onA
         if (failedAssignments.length > 0) {
             const successfulCount = totalUsers - failedAssignments.length;
             message.warning(`Assignment completed. ${successfulCount} users updated, ${failedAssignments.length} failed.`);
-            console.error("Failed role assignments:", failedAssignments);
+            
+            // Log errors in development only
+            if (process.env.NODE_ENV === 'development') {
+                console.error("Failed role assignments:", failedAssignments);
+            }
         } else {
             message.success(`Successfully assigned ${selectedRoles.length} roles to ${totalUsers} users.`);
         }

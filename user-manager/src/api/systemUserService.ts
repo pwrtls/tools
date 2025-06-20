@@ -8,6 +8,32 @@ interface PaginatedResult {
     nextLink?: string;
 }
 
+// Security: Input sanitization function
+const sanitizeSearchInput = (input: string): string => {
+    if (!input || typeof input !== 'string') return '';
+    
+    // Remove potentially dangerous characters and limit length
+    return input
+        .replace(/[<>&"']/g, '') // Remove HTML/XML chars
+        .replace(/[;(){}[\]]/g, '') // Remove SQL injection chars
+        .replace(/--/g, '') // Remove SQL comments
+        .trim()
+        .substring(0, 100); // Limit length
+};
+
+// Security: Validate column names against allowed list
+const ALLOWED_SEARCH_COLUMNS = [
+    'fullname',
+    'internalemailaddress', 
+    'domainname',
+    'businessunitid',
+    'positionid'
+];
+
+const isValidColumn = (column: string): boolean => {
+    return ALLOWED_SEARCH_COLUMNS.includes(column);
+};
+
 export const getSystemUsers = async (
     powerTools: PowerTools, 
     viewId?: string, 
@@ -15,10 +41,16 @@ export const getSystemUsers = async (
     search?: string, 
     fetchAll: boolean = false,
     columns?: ColumnsType<ISystemUser>,
-    nextLink?: string
+    nextLink?: string,
+    abortSignal?: AbortSignal // Added for request cancellation
 ): Promise<PaginatedResult> => {
     if (!powerTools.get) {
         return { users: [], hasMore: false };
+    }
+
+    // Check if request was cancelled before starting
+    if (abortSignal?.aborted) {
+        throw new Error('Request cancelled');
     }
 
     let url = `/api/data/v9.2/systemusers`;
@@ -62,7 +94,9 @@ export const getSystemUsers = async (
                 const nextUrl = new URL(nextLink);
                 url = `${nextUrl.pathname}${nextUrl.search}`;
             } catch (e) {
-                console.error("Failed to parse nextLink URL, stopping pagination.", e);
+                if (process.env.NODE_ENV === 'development') {
+                    console.error("Failed to parse nextLink URL, stopping pagination.", e);
+                }
                 return { users: [], hasMore: false };
             }
         } else {
@@ -75,6 +109,11 @@ export const getSystemUsers = async (
         let queryUrl = url;
 
         do {
+            // Check if request was cancelled during loop
+            if (abortSignal?.aborted) {
+                throw new Error('Request cancelled');
+            }
+
             const result = await powerTools.get(queryUrl);
             const jsonResult = await result.asJson<{ value: ISystemUser[]; "@odata.nextLink"?: string }>();
             
@@ -88,7 +127,9 @@ export const getSystemUsers = async (
                     const nextUrl = new URL(fullNextLink);
                     queryUrl = `${nextUrl.pathname}${nextUrl.search}`;
                 } catch (e) {
-                    console.error("Failed to parse nextLink URL, stopping pagination.", e);
+                    if (process.env.NODE_ENV === 'development') {
+                        console.error("Failed to parse nextLink URL, stopping pagination.", e);
+                    }
                     queryUrl = ''; 
                 }
             } else {
@@ -99,6 +140,11 @@ export const getSystemUsers = async (
 
         return { users: allUsers, hasMore: false };
     } else {
+        // Check if request was cancelled before final request
+        if (abortSignal?.aborted) {
+            throw new Error('Request cancelled');
+        }
+
         const result = await powerTools.get(url);
         const jsonResult = await result.asJson<{ value: ISystemUser[]; "@odata.nextLink"?: string }>();
         const users = jsonResult?.value || [];
@@ -109,8 +155,15 @@ export const getSystemUsers = async (
     }
 };
 
-// Helper function to build search filter based on displayed columns
+// Security: Enhanced search filter with proper validation
 const buildSearchFilter = (search: string, columns: ColumnsType<ISystemUser>): string => {
+    // Sanitize the search input
+    const sanitizedSearch = sanitizeSearchInput(search);
+    
+    if (!sanitizedSearch) {
+        return '';
+    }
+
     const searchableColumns = columns
         .filter((col): col is { dataIndex: string } => 
             'dataIndex' in col && 
@@ -121,17 +174,20 @@ const buildSearchFilter = (search: string, columns: ColumnsType<ISystemUser>): s
         .filter(dataIndex => {
             // Exclude certain columns that shouldn't be searched
             const excludedColumns = ['systemuserid', 'isdisabled'];
-            return !excludedColumns.includes(dataIndex);
+            return !excludedColumns.includes(dataIndex) && isValidColumn(dataIndex);
         });
 
     if (searchableColumns.length === 0) {
         return '';
     }
 
-    // Log which columns are being searched (for debugging)
-    console.log('Searching across columns:', searchableColumns);
+    // Log in development only
+    if (process.env.NODE_ENV === 'development') {
+        console.log('Searching across columns:', searchableColumns);
+    }
 
-    // Build OData filter for all searchable columns
-    const filters = searchableColumns.map(column => `contains(${column},'${search}')`);
+    // Build OData filter with properly escaped search term
+    const escapedSearch = sanitizedSearch.replace(/'/g, "''"); // Escape single quotes for OData
+    const filters = searchableColumns.map(column => `contains(${column},'${escapedSearch}')`);
     return filters.join(' or ');
 }; 
