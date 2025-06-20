@@ -1,4 +1,4 @@
-import { Select, Input, Button, Row, Col, Tag } from 'antd';
+import { Select, Input, Button, Tag } from 'antd';
 import { IView } from '../models/view';
 
 interface ToolbarProps {
