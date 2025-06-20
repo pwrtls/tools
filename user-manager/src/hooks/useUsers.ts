@@ -17,6 +17,7 @@ export const useUsers = (views: IView[]) => {
     const [loading, setLoading] = useState(false);
     const [loadingMore, setLoadingMore] = useState(false);
     const [selectedView, setSelectedView] = useState<string | undefined>();
+    const [searchText, setSearchText] = useState('');
     const [hasMore, setHasMore] = useState(true);
     const [nextLink, setNextLink] = useState<string | undefined>();
 
@@ -24,6 +25,7 @@ export const useUsers = (views: IView[]) => {
         title: 'Status',
         dataIndex: 'isdisabled',
         key: 'isdisabled',
+        onHeaderCell: () => ({ style: { whiteSpace: 'nowrap' } }),
         render: (isdisabled: boolean) => {
             if (isdisabled === undefined) return 'Unknown';
             if (isdisabled) return 'Disabled';
@@ -33,9 +35,9 @@ export const useUsers = (views: IView[]) => {
 
     const defaultColumns = useMemo((): ColumnsType<ISystemUser> => [
         statusColumn,
-        { title: 'Full Name', dataIndex: 'fullname', key: 'fullname' },
-        { title: 'Email', dataIndex: 'internalemailaddress', key: 'internalemailaddress' },
-        { title: 'Domain Name', dataIndex: 'domainname', key: 'domainname' },
+        { title: 'Full Name', dataIndex: 'fullname', key: 'fullname', onHeaderCell: () => ({ style: { whiteSpace: 'nowrap' } }) },
+        { title: 'Email', dataIndex: 'internalemailaddress', key: 'internalemailaddress', onHeaderCell: () => ({ style: { whiteSpace: 'nowrap' } }) },
+        { title: 'Domain Name', dataIndex: 'domainname', key: 'domainname', onHeaderCell: () => ({ style: { whiteSpace: 'nowrap' } }) },
     ], [statusColumn]);
 
     const [columns, setColumns] = useState<ColumnsType<ISystemUser>>(defaultColumns);
@@ -50,6 +52,7 @@ export const useUsers = (views: IView[]) => {
         if (powerTools.isLoaded) {
             setLoading(true);
             resetPagination();
+            setSearchText('');
             getSystemUsers(powerTools)
                 .then(result => {
                     setUsers(result.users);
@@ -65,7 +68,8 @@ export const useUsers = (views: IView[]) => {
 
         setLoadingMore(true);
         try {
-            const result = await getSystemUsers(powerTools, undefined, undefined, undefined, false, columns, nextLink);
+            const viewType = selectedView ? views.find(v => v.id === selectedView)?.type : undefined;
+            const result = await getSystemUsers(powerTools, selectedView, viewType, searchText, false, columns, nextLink);
             setUsers(prev => [...prev, ...result.users]);
             setHasMore(result.hasMore);
             setNextLink(result.nextLink);
@@ -74,12 +78,13 @@ export const useUsers = (views: IView[]) => {
         } finally {
             setLoadingMore(false);
         }
-    }, [powerTools, hasMore, loadingMore, nextLink, columns]);
+    }, [powerTools, hasMore, loadingMore, nextLink, columns, selectedView, searchText, views]);
 
     const handleViewChange = useCallback((viewId: string) => {
         setLoading(true);
         setSelectedView(viewId);
         resetPagination();
+        setSearchText('');
         
         const selected = views.find(v => v.id === viewId);
         if (!selected) {
@@ -101,6 +106,7 @@ export const useUsers = (views: IView[]) => {
                     title: formatColumnTitle(cell['@_name']),
                     dataIndex: cell['@_name'],
                     key: cell['@_name'],
+                    onHeaderCell: () => ({ style: { whiteSpace: 'nowrap' } }),
                 }));
                 if (!newColumns.some((col: any) => col.key === 'isdisabled')) {
                     newColumns = [statusColumn, ...newColumns];
@@ -114,6 +120,7 @@ export const useUsers = (views: IView[]) => {
     const handleSearch = useCallback((value: string) => {
         setLoading(true);
         resetPagination();
+        setSearchText(value);
         
         if (selectedView) {
             // Search within the current view using the current columns
@@ -154,6 +161,7 @@ export const useUsers = (views: IView[]) => {
         setColumns(defaultColumns);
         setLoading(true);
         resetPagination();
+        setSearchText('');
         getSystemUsers(powerTools).then(result => {
             setUsers(result.users);
             setHasMore(result.hasMore);

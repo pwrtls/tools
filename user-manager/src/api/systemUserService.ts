@@ -56,10 +56,18 @@ export const getSystemUsers = async (
 
     // Add pagination
     if (!fetchAll) {
-        url += url.includes('?') ? '&' : '?';
-        url += '$top=50'; // Load 50 records per page
         if (nextLink) {
-            url = nextLink;
+            // The nextLink is a full URL, we need to extract the path and query string
+            try {
+                const nextUrl = new URL(nextLink);
+                url = `${nextUrl.pathname}${nextUrl.search}`;
+            } catch (e) {
+                console.error("Failed to parse nextLink URL, stopping pagination.", e);
+                return { users: [], hasMore: false };
+            }
+        } else {
+            const separator = url.includes('?') ? '&' : '?';
+            url += `${separator}$top=50`; // Load 50 records per page
         }
     }
 

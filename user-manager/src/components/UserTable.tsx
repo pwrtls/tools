@@ -54,7 +54,7 @@ export const UserTable = ({
                 dataSource={users}
                 rowKey="systemuserid"
                 pagination={false} // Disable pagination since we're using infinite scroll
-                scroll={{ y: 600 }}
+                scroll={{ y: 600, x: 'max-content' }}
             />
             {loadingMore && (
                 <div style={{ 
