@@ -10,6 +10,8 @@ interface ToolbarProps {
     handleAssignRolesClick: () => void;
     hasSelected: boolean;
     selectedRowCount: number;
+    onClearSelection: () => void;
+    rolesLoading?: boolean;
 }
 
 export const Toolbar = ({
@@ -20,12 +22,24 @@ export const Toolbar = ({
     selectedView,
     handleAssignRolesClick,
     hasSelected,
-    selectedRowCount
+    selectedRowCount,
+    onClearSelection,
+    rolesLoading = false
 }: ToolbarProps) => {
     return (
         <>
-            <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
-                <Col>
+            <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center', 
+                marginBottom: 16,
+                gap: 16
+            }}>
+                {/* Left side - empty for now, can be used for future elements */}
+                <div></div>
+                
+                {/* Right side - view selector and search */}
+                <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
                     <Select
                         style={{ width: 350 }}
                         placeholder="Select a view"
@@ -61,19 +75,24 @@ export const Toolbar = ({
                             </Select.OptGroup>
                         )}
                     </Select>
-                </Col>
-                <Col>
                     <Input.Search
-                        placeholder="Search users"
+                        placeholder={selectedView ? "Search across all columns in view" : "Search across all columns"}
                         onSearch={handleSearch}
-                        disabled={!!selectedView}
                         style={{ width: 300 }}
                     />
-                </Col>
-            </Row>
+                </div>
+            </div>
             <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <Button type="primary" onClick={handleAssignRolesClick} disabled={!hasSelected}>
+                <Button 
+                    type="primary" 
+                    onClick={handleAssignRolesClick} 
+                    disabled={!hasSelected}
+                    loading={rolesLoading}
+                >
                     Assign Security Roles
+                </Button>
+                <Button onClick={onClearSelection} disabled={!hasSelected}>
+                    Clear Selection
                 </Button>
                 <span style={{ marginLeft: 8 }}>
                     {hasSelected ? `Selected ${selectedRowCount} items` : ''}

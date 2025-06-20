@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { message, Table } from 'antd';
+import { message } from 'antd';
 import { ISystemUser } from '../models/systemUser';
 
 type FetchAllUsersInView = (viewId: string) => Promise<ISystemUser[]>;
@@ -16,21 +16,25 @@ export const useUserSelection = (
         setSelectedRowKeys(newSelectedRowKeys);
     };
 
-    const handleSelectAllFromView = useCallback(async () => {
-        if (!selectedView) {
-            message.warning('Please select a view first.');
-            return;
+    const handleSelectAll = useCallback(async () => {
+        if (selectedView) {
+            // If a view is selected, fetch all users in that view
+            setLoading(true);
+            message.loading({ content: 'Fetching all users in view...', key: 'loading' });
+
+            const allUsers = await fetchAllUsersInView(selectedView);
+            const allUserKeys = allUsers.map(user => user.systemuserid);
+            setSelectedRowKeys(allUserKeys);
+
+            setLoading(false);
+            message.success({ content: `Selected ${allUserKeys.length} users from view.`, key: 'loading' });
+        } else {
+            // If no view is selected, select all users currently displayed
+            const allUserKeys = users.map(user => user.systemuserid);
+            setSelectedRowKeys(allUserKeys);
+            message.success(`Selected ${allUserKeys.length} users.`);
         }
-        setLoading(true);
-        message.loading({ content: 'Fetching all users in view...', key: 'loading' });
-
-        const allUsers = await fetchAllUsersInView(selectedView);
-        const allUserKeys = allUsers.map(user => user.systemuserid);
-        setSelectedRowKeys(allUserKeys);
-
-        setLoading(false);
-        message.success({ content: `Selected ${allUserKeys.length} users.`, key: 'loading' });
-    }, [selectedView, fetchAllUsersInView]);
+    }, [selectedView, fetchAllUsersInView, users]);
 
     const rowSelection = {
         selectedRowKeys,
@@ -39,31 +43,7 @@ export const useUserSelection = (
             disabled: record.isdisabled,
             name: record.fullname,
         }),
-        selections: [
-            Table.SELECTION_ALL,
-            Table.SELECTION_INVERT,
-            Table.SELECTION_NONE,
-            {
-                key: 'all-view-users',
-                text: 'Select All Users in View',
-                onSelect: handleSelectAllFromView,
-            },
-            {
-                key: 'all-current-users',
-                text: 'Select All on Current Page',
-                onSelect: () => {
-                    const allUserKeys = users.map(user => user.systemuserid);
-                    setSelectedRowKeys(allUserKeys);
-                },
-            },
-            {
-                key: 'clear-all',
-                text: 'Clear All Selections',
-                onSelect: () => {
-                    setSelectedRowKeys([]);
-                },
-            }
-        ],
+        onSelectAll: handleSelectAll,
     };
 
     return { selectedRowKeys, setSelectedRowKeys, rowSelection, loading };

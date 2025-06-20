@@ -79,14 +79,26 @@ export const useUsers = (views: IView[]) => {
 
     const handleSearch = useCallback((value: string) => {
         setLoading(true);
-        getSystemUsers(powerTools, undefined, undefined, value, false)
-            .then(users => {
-                setUsers(users);
-                setColumns(defaultColumns);
-                setSelectedView(undefined);
-            })
-            .finally(() => setLoading(false));
-    }, [powerTools, defaultColumns]);
+        if (selectedView) {
+            // Search within the current view using the current columns
+            const selected = views.find(v => v.id === selectedView);
+            if (selected) {
+                getSystemUsers(powerTools, selected.id, selected.type, value, false, columns)
+                    .then(users => {
+                        setUsers(users);
+                    })
+                    .finally(() => setLoading(false));
+            }
+        } else {
+            // Global search when no view is selected
+            getSystemUsers(powerTools, undefined, undefined, value, false, columns)
+                .then(users => {
+                    setUsers(users);
+                    setColumns(defaultColumns);
+                })
+                .finally(() => setLoading(false));
+        }
+    }, [powerTools, selectedView, views, defaultColumns, columns]);
 
     const fetchAllUsersInView = useCallback(async (viewId: string) => {
         const selected = views.find(v => v.id === viewId);

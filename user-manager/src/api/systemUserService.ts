@@ -1,7 +1,15 @@
 import { ISystemUser } from "../models/systemUser";
 import { PowerTools } from "../powertools/context";
+import { ColumnsType } from "antd/es/table";
 
-export const getSystemUsers = async (powerTools: PowerTools, viewId?: string, viewType?: 'system' | 'personal', search?: string, fetchAll: boolean = false): Promise<ISystemUser[]> => {
+export const getSystemUsers = async (
+    powerTools: PowerTools, 
+    viewId?: string, 
+    viewType?: 'system' | 'personal', 
+    search?: string, 
+    fetchAll: boolean = false,
+    columns?: ColumnsType<ISystemUser>
+): Promise<ISystemUser[]> => {
     if (!powerTools.get) {
         return [];
     }
@@ -15,14 +23,27 @@ export const getSystemUsers = async (powerTools: PowerTools, viewId?: string, vi
         } else {
             url += `?userQuery=${viewId}`;
         }
+        
+        // Add search filter to view queries
+        if (search && columns) {
+            const searchFilters = buildSearchFilter(search, columns);
+            if (searchFilters) {
+                url += `&$filter=${searchFilters}`;
+            }
+        }
     } else {
         let select = `?$select=fullname,internalemailaddress,domainname,isdisabled`;
         if (fetchAll) {
             select = `?$select=systemuserid`;
         }
         url += select;
-        if (search) {
-            url += `&$filter=contains(fullname,'${search}') or contains(internalemailaddress,'${search}')`;
+        
+        // Add search filter for global search
+        if (search && columns) {
+            const searchFilters = buildSearchFilter(search, columns);
+            if (searchFilters) {
+                url += `&$filter=${searchFilters}`;
+            }
         }
     }
 
@@ -58,4 +79,31 @@ export const getSystemUsers = async (powerTools: PowerTools, viewId?: string, vi
         const jsonResult = await result.asJson<{ value: ISystemUser[] }>();
         return jsonResult?.value || [];
     }
+};
+
+// Helper function to build search filter based on displayed columns
+const buildSearchFilter = (search: string, columns: ColumnsType<ISystemUser>): string => {
+    const searchableColumns = columns
+        .filter((col): col is { dataIndex: string } => 
+            'dataIndex' in col && 
+            typeof col.dataIndex === 'string' && 
+            col.dataIndex !== undefined
+        )
+        .map(col => col.dataIndex)
+        .filter(dataIndex => {
+            // Exclude certain columns that shouldn't be searched
+            const excludedColumns = ['systemuserid', 'isdisabled'];
+            return !excludedColumns.includes(dataIndex);
+        });
+
+    if (searchableColumns.length === 0) {
+        return '';
+    }
+
+    // Log which columns are being searched (for debugging)
+    console.log('Searching across columns:', searchableColumns);
+
+    // Build OData filter for all searchable columns
+    const filters = searchableColumns.map(column => `contains(${column},'${search}')`);
+    return filters.join(' or ');
 }; 

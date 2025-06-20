@@ -22,11 +22,15 @@ export const SystemUsersView = () => {
         fetchAllUsersInView,
         clearViewSelection
     } = useUsers(views);
-    const { roles, loading: rolesLoading } = useRoles();
-    const { selectedRowKeys, setSelectedRowKeys, rowSelection, loading: selectionLoading } = useUserSelection(users, selectedView, fetchAllUsersInView);
+    const { roles, loading: rolesLoading, loadRoles, hasLoaded } = useRoles();
+    const { selectedRowKeys, setSelectedRowKeys, rowSelection } = useUserSelection(users, selectedView, fetchAllUsersInView);
     const [isModalVisible, setIsModalVisible] = useState(false);
 
-    const handleAssignRolesClick = () => {
+    const handleAssignRolesClick = async () => {
+        // Load roles if not already loaded
+        if (!hasLoaded) {
+            await loadRoles();
+        }
         setIsModalVisible(true);
     };
 
@@ -34,11 +38,16 @@ export const SystemUsersView = () => {
         setSelectedRowKeys([]);
     };
 
-    const isLoading = viewsLoading || usersLoading || rolesLoading || selectionLoading;
+    const handleClearSelection = () => {
+        setSelectedRowKeys([]);
+    };
+
+    // Progressive loading: Only block UI for essential data (views + users)
+    const isEssentialLoading = viewsLoading || usersLoading;
     const hasSelected = selectedRowKeys.length > 0;
 
     return (
-        <Spin spinning={isLoading} tip="Loading...">
+        <Spin spinning={isEssentialLoading} tip="Loading user data...">
             <Title level={2}>User Manager</Title>
             <Toolbar
                 groupedViews={groupedViews}
@@ -49,6 +58,8 @@ export const SystemUsersView = () => {
                 handleAssignRolesClick={handleAssignRolesClick}
                 hasSelected={hasSelected}
                 selectedRowCount={selectedRowKeys.length}
+                onClearSelection={handleClearSelection}
+                rolesLoading={rolesLoading}
             />
             <UserTable
                 loading={usersLoading}
@@ -63,6 +74,22 @@ export const SystemUsersView = () => {
                 selectedRowKeys={selectedRowKeys}
                 onAssignmentComplete={handleAssignmentComplete}
             />
+            {/* Show a subtle indicator if roles are still loading */}
+            {rolesLoading && (
+                <div style={{ 
+                    position: 'fixed', 
+                    bottom: 20, 
+                    right: 20, 
+                    background: '#1890ff', 
+                    color: 'white', 
+                    padding: '8px 12px', 
+                    borderRadius: 4,
+                    fontSize: '12px',
+                    zIndex: 1000
+                }}>
+                    Loading security roles...
+                </div>
+            )}
         </Spin>
     );
 }; 
