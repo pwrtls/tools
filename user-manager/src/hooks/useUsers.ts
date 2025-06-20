@@ -191,12 +191,54 @@ export const useUsers = (views: IView[]) => {
 
     // Performance: Search effect with debouncing
     useEffect(() => {
-        if (!debouncedSearchText.trim()) return;
-        
         cleanup(); // Cancel any pending requests
         setLoading(true);
         resetPagination();
         
+        // BUG FIX: Handle empty search - restore original list
+        // This ensures that when users clear the search box, they see the full list again
+        if (!debouncedSearchText.trim()) {
+            if (selectedView) {
+                // Restore view users when search is cleared
+                const selected = views.find(v => v.id === selectedView);
+                if (selected) {
+                    getSystemUsers(powerTools, selected.id, selected.type, undefined, false, columns)
+                        .then(result => {
+                            setUsers(result.users);
+                            setHasMore(result.hasMore);
+                            setNextLink(result.nextLink);
+                        })
+                        .catch(error => {
+                            if (process.env.NODE_ENV === 'development') {
+                                console.error('Failed to restore view users:', error);
+                            }
+                            setUsers([]);
+                        })
+                        .finally(() => setLoading(false));
+                } else {
+                    setLoading(false);
+                }
+            } else {
+                // Restore all users when no view is selected and search is cleared
+                getSystemUsers(powerTools, undefined, undefined, undefined, false, defaultColumns)
+                    .then(result => {
+                        setUsers(result.users);
+                        setHasMore(result.hasMore);
+                        setNextLink(result.nextLink);
+                        setColumns(defaultColumns);
+                    })
+                    .catch(error => {
+                        if (process.env.NODE_ENV === 'development') {
+                            console.error('Failed to restore all users:', error);
+                        }
+                        setUsers([]);
+                    })
+                    .finally(() => setLoading(false));
+            }
+            return;
+        }
+        
+        // Handle search with text - existing search functionality
         if (selectedView) {
             // Search within the current view using the current columns
             const selected = views.find(v => v.id === selectedView);
@@ -214,6 +256,8 @@ export const useUsers = (views: IView[]) => {
                         setUsers([]);
                     })
                     .finally(() => setLoading(false));
+            } else {
+                setLoading(false);
             }
         } else {
             // Global search when no view is selected
