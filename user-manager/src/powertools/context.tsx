@@ -24,6 +24,8 @@ interface IPowerToolsContextProviderState {
 }
 
 export class PowerToolsContextProvider extends React.PureComponent<IPowerToolsContextProviderProps, IPowerToolsContextProviderState> {
+    private connectionChangeListenerRef: ((name: string | undefined) => void) | null = null;
+
     constructor(props: IPowerToolsContextProviderProps) {
         super(props);
         this.state = {
@@ -46,8 +48,41 @@ export class PowerToolsContextProvider extends React.PureComponent<IPowerToolsCo
             return;
         }
 
-        window.PowerTools.onLoad().then(this.onLoadCallback);
-        window.PowerTools.addConnectionChangeListener(this.connectionChangeCallback);
+        try {
+            // Store the reference to the callback for cleanup
+            this.connectionChangeListenerRef = this.connectionChangeCallback;
+            
+            window.PowerTools.onLoad().then(this.onLoadCallback).catch((error: Error) => {
+                // Handle onLoad promise rejection
+                if (process.env.NODE_ENV === 'development') {
+                    console.error('PowerTools onLoad failed:', error);
+                }
+                this.setState({ invalidContext: true });
+            });
+            
+            window.PowerTools.addConnectionChangeListener(this.connectionChangeListenerRef);
+        } catch (error) {
+            // Handle any synchronous errors during setup
+            if (process.env.NODE_ENV === 'development') {
+                console.error('PowerTools setup failed:', error);
+            }
+            this.setState({ invalidContext: true });
+        }
+    }
+
+    componentWillUnmount() {
+        // Clean up event listeners to prevent memory leaks
+        // Note: PowerTools API doesn't provide removeConnectionChangeListener method
+        // so we cannot clean up the listener, but we clear our reference
+        if (this.connectionChangeListenerRef) {
+            // If PowerTools API is updated in the future to support cleanup, this is where it would go
+            if (process.env.NODE_ENV === 'development') {
+                console.info('PowerTools API does not support removeConnectionChangeListener - listener will remain active');
+            }
+        }
+        
+        // Clear the reference
+        this.connectionChangeListenerRef = null;
     }
 
     componentDidUpdate(_: IPowerToolsContextProviderProps, prevState: IPowerToolsContextProviderState) {
@@ -72,7 +107,9 @@ export class PowerToolsContextProvider extends React.PureComponent<IPowerToolsCo
     }
 
     connectionChangeCallback = (name: string | undefined) => {
-        this.setState({ connectionName: name || '' });
+        // Validate the connection name parameter
+        const validatedName = typeof name === 'string' ? name : '';
+        this.setState({ connectionName: validatedName });
     }
 
     get invalidContextResult() {

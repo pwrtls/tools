@@ -1,4 +1,5 @@
 import { useState, useEffect, useContext, useMemo, useCallback } from 'react';
+import { message } from 'antd';
 import { ISystemUser } from '../models/systemUser';
 import { getSystemUsers } from '../api/systemUserService';
 import { PowerToolsContext } from '../powertools/context';
@@ -20,6 +21,7 @@ export const useUsers = (views: IView[]) => {
     const [searchText, setSearchText] = useState('');
     const [hasMore, setHasMore] = useState(true);
     const [nextLink, setNextLink] = useState<string | undefined>();
+    const [error, setError] = useState<string | null>(null);
 
     const statusColumn = useMemo((): ColumnsType<ISystemUser>[0] => ({
         title: 'Status',
@@ -42,10 +44,29 @@ export const useUsers = (views: IView[]) => {
 
     const [columns, setColumns] = useState<ColumnsType<ISystemUser>>(defaultColumns);
 
+    // Utility function to remove duplicates
+    const removeDuplicateUsers = useCallback((userList: ISystemUser[]) => {
+        return userList.filter((user, index, self) => 
+            index === self.findIndex(u => u.systemuserid === user.systemuserid)
+        );
+    }, []);
+
+    // Utility function to handle API errors
+    const handleApiError = useCallback((error: unknown, operation: string) => {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+        setError(`Failed to ${operation}: ${errorMessage}`);
+        message.error(`Failed to ${operation}. Please try again.`);
+        
+        if (process.env.NODE_ENV === 'development') {
+            console.error(`API Error during ${operation}:`, error);
+        }
+    }, []);
+
     const resetPagination = useCallback(() => {
         setUsers([]);
         setHasMore(true);
         setNextLink(undefined);
+        setError(null);
     }, []);
 
     useEffect(() => {
@@ -53,24 +74,25 @@ export const useUsers = (views: IView[]) => {
             setLoading(true);
             resetPagination();
             setSearchText('');
+            
             getSystemUsers(powerTools)
-                                .then(result => {
-                    // Remove duplicates from initial load
-                    const uniqueUsers = result.users.filter((user, index, self) => 
-                        index === self.findIndex(u => u.systemuserid === user.systemuserid)
-                    );
+                .then(result => {
+                    const uniqueUsers = removeDuplicateUsers(result.users);
                     setUsers(uniqueUsers);
                     setHasMore(!!result.nextLink);
                     setNextLink(result.nextLink);
+                    setError(null);
                 })
+                .catch(error => handleApiError(error, 'load users'))
                 .finally(() => setLoading(false));
         }
-    }, [powerTools, resetPagination]);
+    }, [powerTools, resetPagination, removeDuplicateUsers, handleApiError]);
 
     const loadMoreUsers = useCallback(async () => {
         if (!hasMore || loadingMore || !nextLink) {
             return;
         }
+        
         setLoadingMore(true);
         try {
             const viewType = selectedView ? views.find(v => v.id === selectedView)?.type : undefined;
@@ -80,18 +102,18 @@ export const useUsers = (views: IView[]) => {
             setUsers(prev => {
                 const existingIds = new Set(prev.map(user => user.systemuserid));
                 const newUsers = result.users.filter(user => !existingIds.has(user.systemuserid));
-
                 return [...prev, ...newUsers];
             });
             
             setHasMore(!!result.nextLink);
             setNextLink(result.nextLink);
+            setError(null);
         } catch (error) {
-            console.error('Failed to load more users:', error);
+            handleApiError(error, 'load more users');
         } finally {
             setLoadingMore(false);
         }
-    }, [powerTools, hasMore, loadingMore, nextLink, columns, selectedView, searchText, views]);
+    }, [powerTools, hasMore, loadingMore, nextLink, columns, selectedView, searchText, views, handleApiError]);
 
     const handleViewChange = useCallback((viewId: string) => {
         setLoading(true);
@@ -104,35 +126,45 @@ export const useUsers = (views: IView[]) => {
             setLoading(false);
             setUsers([]);
             setColumns(defaultColumns);
+            handleApiError(new Error('Selected view not found'), 'change view');
             return;
         }
 
-        getSystemUsers(powerTools, viewId, selected.type, undefined, false, columns).then(result => {
-            // Remove duplicates from initial view load
-            const uniqueUsers = result.users.filter((user, index, self) => 
-                index === self.findIndex(u => u.systemuserid === user.systemuserid)
-            );
-            setUsers(uniqueUsers);
-            setHasMore(!!result.nextLink);
-            setNextLink(result.nextLink);
-            if (selected) {
-                const parser = new XMLParser({ ignoreAttributes: false });
-                const layout = parser.parse(selected.layoutxml);
-                const cells = layout.grid.row.cell;
-                let newColumns = cells.map((cell: any) => ({
-                    title: formatColumnTitle(cell['@_name']),
-                    dataIndex: cell['@_name'],
-                    key: cell['@_name'],
-                    onHeaderCell: () => ({ style: { whiteSpace: 'nowrap' } }),
-                }));
-                if (!newColumns.some((col: any) => col.key === 'isdisabled')) {
-                    newColumns = [statusColumn, ...newColumns];
+        getSystemUsers(powerTools, viewId, selected.type, undefined, false, columns)
+            .then(result => {
+                const uniqueUsers = removeDuplicateUsers(result.users);
+                setUsers(uniqueUsers);
+                setHasMore(!!result.nextLink);
+                setNextLink(result.nextLink);
+                
+                if (selected) {
+                    try {
+                        const parser = new XMLParser({ ignoreAttributes: false });
+                        const layout = parser.parse(selected.layoutxml);
+                        const cells = layout.grid.row.cell;
+                        let newColumns = cells.map((cell: any) => ({
+                            title: formatColumnTitle(cell['@_name']),
+                            dataIndex: cell['@_name'],
+                            key: cell['@_name'],
+                            onHeaderCell: () => ({ style: { whiteSpace: 'nowrap' } }),
+                        }));
+                        if (!newColumns.some((col: any) => col.key === 'isdisabled')) {
+                            newColumns = [statusColumn, ...newColumns];
+                        }
+                        setColumns(newColumns);
+                    } catch (parseError) {
+                        // If XML parsing fails, use default columns
+                        setColumns(defaultColumns);
+                        if (process.env.NODE_ENV === 'development') {
+                            console.warn('Failed to parse view layout XML, using default columns:', parseError);
+                        }
+                    }
                 }
-                setColumns(newColumns);
-            }
-            setLoading(false);
-        });
-    }, [powerTools, views, statusColumn, defaultColumns, columns, resetPagination]);
+                setError(null);
+            })
+            .catch(error => handleApiError(error, 'change view'))
+            .finally(() => setLoading(false));
+    }, [powerTools, views, statusColumn, defaultColumns, columns, resetPagination, removeDuplicateUsers, handleApiError]);
 
     const handleSearch = useCallback((value: string) => {
         setLoading(true);
@@ -145,41 +177,44 @@ export const useUsers = (views: IView[]) => {
             if (selected) {
                 getSystemUsers(powerTools, selected.id, selected.type, value, false, columns)
                     .then(result => {
-                        // Remove duplicates from search results
-                        const uniqueUsers = result.users.filter((user, index, self) => 
-                            index === self.findIndex(u => u.systemuserid === user.systemuserid)
-                        );
+                        const uniqueUsers = removeDuplicateUsers(result.users);
                         setUsers(uniqueUsers);
                         setHasMore(!!result.nextLink);
                         setNextLink(result.nextLink);
+                        setError(null);
                     })
+                    .catch(error => handleApiError(error, 'search within view'))
                     .finally(() => setLoading(false));
             }
         } else {
             // Global search when no view is selected
             getSystemUsers(powerTools, undefined, undefined, value, false, columns)
                 .then(result => {
-                    // Remove duplicates from global search results
-                    const uniqueUsers = result.users.filter((user, index, self) => 
-                        index === self.findIndex(u => u.systemuserid === user.systemuserid)
-                    );
+                    const uniqueUsers = removeDuplicateUsers(result.users);
                     setUsers(uniqueUsers);
                     setHasMore(!!result.nextLink);
                     setNextLink(result.nextLink);
                     setColumns(defaultColumns);
+                    setError(null);
                 })
+                .catch(error => handleApiError(error, 'search users'))
                 .finally(() => setLoading(false));
         }
-    }, [powerTools, selectedView, views, defaultColumns, columns, resetPagination]);
+    }, [powerTools, selectedView, views, defaultColumns, columns, resetPagination, removeDuplicateUsers, handleApiError]);
 
     const fetchAllUsersInView = useCallback(async (viewId: string) => {
-        const selected = views.find(v => v.id === viewId);
-        if (selected) {
-            const result = await getSystemUsers(powerTools, selected.id, selected.type, undefined, true);
-            return result.users;
+        try {
+            const selected = views.find(v => v.id === viewId);
+            if (selected) {
+                const result = await getSystemUsers(powerTools, selected.id, selected.type, undefined, true);
+                return result.users;
+            }
+            return [];
+        } catch (error) {
+            handleApiError(error, 'fetch all users in view');
+            return [];
         }
-        return [];
-    }, [powerTools, views]);
+    }, [powerTools, views, handleApiError]);
 
     const clearViewSelection = useCallback(() => {
         setSelectedView(undefined);
@@ -187,16 +222,18 @@ export const useUsers = (views: IView[]) => {
         setLoading(true);
         resetPagination();
         setSearchText('');
-        getSystemUsers(powerTools).then(result => {
-            // Remove duplicates from initial load
-            const uniqueUsers = result.users.filter((user, index, self) => 
-                index === self.findIndex(u => u.systemuserid === user.systemuserid)
-            );
-            setUsers(uniqueUsers);
-            setHasMore(!!result.nextLink);
-            setNextLink(result.nextLink);
-        }).finally(() => setLoading(false));
-    }, [powerTools, defaultColumns, resetPagination]);
+        
+        getSystemUsers(powerTools)
+            .then(result => {
+                const uniqueUsers = removeDuplicateUsers(result.users);
+                setUsers(uniqueUsers);
+                setHasMore(!!result.nextLink);
+                setNextLink(result.nextLink);
+                setError(null);
+            })
+            .catch(error => handleApiError(error, 'clear view selection'))
+            .finally(() => setLoading(false));
+    }, [powerTools, defaultColumns, resetPagination, removeDuplicateUsers, handleApiError]);
 
     return { 
         users, 
@@ -209,6 +246,7 @@ export const useUsers = (views: IView[]) => {
         handleSearch, 
         fetchAllUsersInView, 
         clearViewSelection,
-        loadMoreUsers
+        loadMoreUsers,
+        error
     };
 }; 
