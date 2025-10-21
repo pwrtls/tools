@@ -1,0 +1,70 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+
+type: software
+title: "Power Tools: Extensible Cross-Platform Toolkit for Microsoft Power Platform"
+abstract: "Power Tools is a modern, web-based alternative to XrmToolBox that provides a secure wrapper for Dataverse APIs, admin APIs, and Power Query APIs. It enables community-driven development of tools that simplify complex tasks and daily workflows for Power Platform developers and administrators."
+
+authors:
+  - family-names: "Power Tools Community"
+    name-particle: "The"
+    affiliation: "Open Source Community"
+    orcid: "https://orcid.org/0000-0000-0000-0000"
+  - family-names: "Hilton"
+    given-names: "Jared"
+    affiliation: "Project Lead"
+    orcid: "https://orcid.org/0000-0000-0000-0000"
+    email: "jared@powertools.dev"
+
+repository-code: "https://github.com/pwrtls/pwrtls"
+url: "https://powertools.dev"
+license: MIT
+keywords:
+  - microsoft-power-platform
+  - dataverse
+  - power-apps
+  - power-automate
+  - dynamics-365
+  - xrmtoolbox-alternative
+  - developer-tools
+  - cross-platform
+  - web-based
+  - open-source
+
+preferred-citation:
+  type: software
+  title: "Power Tools: A Community-Driven Toolkit for Microsoft Power Platform Development"
+  authors:
+    - family-names: "Power Tools Community"
+      name-particle: "The"
+      affiliation: "Open Source Community"
+  repository-code: "https://github.com/pwrtls/pwrtls"
+  url: "https://powertools.dev"
+  license: MIT
+  year: 2025
+  month: 1
+  day: 1
+  version: "1.0.0"
+  abstract: "Power Tools provides an extensible, cross-platform toolkit for developers working with the Microsoft Power Platform. Built as a modern alternative to traditional desktop tools, it offers a web-based framework that supports community tool development across Windows, macOS, and Linux platforms."
+
+references:
+  - type: article
+    title: "Building Community-Driven Developer Tools for the Power Platform"
+    authors:
+      - family-names: "Hilton"
+        given-names: "Jared"
+    journal: "Power Platform Developer Blog"
+    year: 2024
+    url: "https://blog.powertools.dev/community-tools"
+
+  - type: software
+    title: "XrmToolBox"
+    abstract: "The original Swiss Army Knife for Dynamics 365 & Power Platform"
+    url: "https://www.xrmtoolbox.com/"
+    license: "MIT"
+
+  - type: software
+    title: "Microsoft Power Platform"
+    abstract: "Low-code platform for business applications"
+    url: "https://powerplatform.microsoft.com/"
+    license: "Proprietary"
