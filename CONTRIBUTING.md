@@ -307,6 +307,111 @@ Contributors will be recognized through:
 - **Community highlights** in release notes
 - **Special badges** for significant contributions
 
+## Contributors
+
+We thank all contributors who help make Power Tools better for the Power Platform community.
+
+### Core Team
+
+#### Project Maintainers
+- **[@jaredhilton](https://github.com/jaredhilton)** - Project Lead, Architecture & Backend
+- **[@username](https://github.com/username)** - Technical Lead, Frontend & UI
+- **[@username](https://github.com/username)** - Community Lead, Documentation & Events
+
+#### Core Contributors
+- **[@username](https://github.com/username)** - Backend Development, API Design
+- **[@username](https://github.com/username)** - Frontend Development, UI/UX
+- **[@username](https://github.com/username)** - Plugin Framework, Developer Experience
+- **[@username](https://github.com/username)** - Documentation, Community Support
+
+### Recognition Levels
+
+#### 🏆 Power Tools Champion
+*Top contributors with significant impact*
+- 50+ merged pull requests
+- Major feature contributions
+- Active community leadership
+- Consistent long-term engagement
+
+#### 🚀 Tool Builder
+*Created successful plugins*
+- Published plugin in marketplace
+- Active maintenance and updates
+- Community adoption and positive feedback
+- Documentation and support
+
+#### 📚 Documentation Master
+*Major documentation contributions*
+- Comprehensive guides and tutorials
+- API documentation and examples
+- Community resources and best practices
+- Learning materials and onboarding
+
+#### 🐛 Bug Slayer
+*Found and fixed critical bugs*
+- Identified security vulnerabilities
+- Fixed performance issues
+- Resolved compatibility problems
+- Improved system reliability
+
+#### 🎓 Mentor
+*Helped new contributors*
+- Guided new community members
+- Provided technical assistance
+- Created educational content
+- Organized learning events
+
+#### 🌟 Community Champion
+*Active community engagement*
+- Regular participation in discussions
+- Event organization and participation
+- Community advocacy and promotion
+- Support and encouragement
+
+### How to Get Recognized
+
+#### Contributing Code
+- Submit pull requests with bug fixes or features
+- Follow coding standards and best practices
+- Include tests and documentation
+- Participate in code reviews
+
+#### Creating Plugins
+- Build useful tools for the Power Platform community
+- Follow plugin development guidelines
+- Provide comprehensive documentation
+- Maintain and update your plugins
+
+#### Improving Documentation
+- Fix typos and improve clarity
+- Add missing documentation
+- Create tutorials and guides
+- Translate documentation
+
+#### Community Engagement
+- Participate in discussions
+- Help other contributors
+- Organize or attend events
+- Promote the project
+
+#### Reporting Issues
+- Report bugs with detailed information
+- Suggest new features
+- Provide feedback and suggestions
+- Test new releases
+
+### Recognition Process
+
+Contributors are recognized based on:
+
+- **Quality of contributions** - Code quality, documentation, tests
+- **Community impact** - How contributions help the community
+- **Consistency** - Regular and sustained contributions
+- **Collaboration** - Working well with others
+- **Leadership** - Helping others and driving initiatives
+
+Recognition is updated monthly and contributors are notified of their achievements.
+
 ### Support Channels
 
 - **GitHub Issues**: Technical problems and bugs

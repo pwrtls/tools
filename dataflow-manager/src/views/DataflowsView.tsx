@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useState, useCallback } from 'react';
+import React, { useContext, useEffect, useState, useCallback, useMemo } from 'react';
 import { Table, Button, Modal, Select, message, Spin, Space, Typography, Alert, Card } from 'antd';
 import { EditOutlined, UserOutlined, BugOutlined, ReloadOutlined } from '@ant-design/icons';
 import { IDataflow, IUser, IDataflowOwnerUpdateRequest } from '../models/dataflow';
@@ -7,7 +7,6 @@ import { PowerToolsContext } from '../powertools/context';
 import { usePowerToolsApi } from '../powertools/apiHook';
 
 const { Title } = Typography;
-const { Option } = Select;
 
 export const DataflowsView: React.FC = () => {
     const { connectionName, isLoaded } = useContext(PowerToolsContext);
@@ -54,7 +53,7 @@ export const DataflowsView: React.FC = () => {
         }
     };
 
-    const loadData = async () => {
+    const loadData = useCallback(async () => {
         try {
             setLoading(true);
             setError('');
@@ -156,14 +155,14 @@ export const DataflowsView: React.FC = () => {
         } finally {
             setLoading(false);
         }
-    };
+    }, [isLoaded, connectionName, getAsJson, getDataflows, getUsers, setLoading, setError, setDataflows, setUsers]);
 
     useEffect(() => {
         // Only load data when PowerTools is fully loaded AND we have a connection
         if (isLoaded && window.PowerTools?.isLoaded() && connectionName) {
             loadData();
         }
-    }, [connectionName, isLoaded]);
+    }, [connectionName, isLoaded, loadData]);
 
     const handleAssignOwner = (dataflow: IDataflow) => {
         setSelectedDataflow(dataflow);
@@ -270,8 +269,23 @@ export const DataflowsView: React.FC = () => {
         loadData();
     };
 
+    // Helper debounce function (moved up for useCallback dependencies)
+    function debounce<F extends (...args: any[]) => any>(func: F, waitFor: number) {
+        let timeout: ReturnType<typeof setTimeout> | null = null;
+
+        const debounced = (...args: Parameters<F>) => {
+            if (timeout !== null) {
+                clearTimeout(timeout);
+                timeout = null;
+            }
+            timeout = setTimeout(() => func(...args), waitFor);
+        };
+
+        return debounced as (...args: Parameters<F>) => ReturnType<F>;
+    }
+
     // Debounced function to fetch users
-    const debouncedUserSearch = useCallback(
+    const debouncedUserSearch = useMemo(() =>
         debounce(async (searchText: string) => {
             if (!searchText || searchText.trim().length < 2) { // Optional: Minimum search length
                 // If search is cleared or too short, load initial/all users or an empty list
@@ -293,7 +307,8 @@ export const DataflowsView: React.FC = () => {
                 setUserSearchLoading(false);
             }
         }, 500), // 500ms debounce delay
-        [getUsers, isLoaded] // Ensure getUsers is stable or correctly re-bound
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [getUsers, isLoaded, debounce] // debounce is now stable within component scope
     );
 
     const handleUserSearch = (searchText: string) => {
@@ -319,7 +334,7 @@ export const DataflowsView: React.FC = () => {
             }
         };
         loadInitialUsers();
-    }, [isLoaded, modalVisible]); // Reload if modal becomes visible
+    }, [isLoaded, modalVisible, getUsers]); // Reload if modal becomes visible
 
     const columns = [
         {
@@ -494,18 +509,3 @@ export const DataflowsView: React.FC = () => {
         </div>
     );
 };
-
-// Helper debounce function (can be moved to a utils file)
-function debounce<F extends (...args: any[]) => any>(func: F, waitFor: number) {
-    let timeout: ReturnType<typeof setTimeout> | null = null;
-
-    const debounced = (...args: Parameters<F>) => {
-        if (timeout !== null) {
-            clearTimeout(timeout);
-            timeout = null;
-        }
-        timeout = setTimeout(() => func(...args), waitFor);
-    };
-
-    return debounced as (...args: Parameters<F>) => ReturnType<F>;
-}

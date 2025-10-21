@@ -62,7 +62,6 @@ export const useDataflowService = (getAsJson: <T>(url: string, query?: URLSearch
 
             let dataflowData: DataverseResponse<DataverseDataflow> | null = null;
             let workingEntitySet: string = '';
-            let lastError: Error | null = null;
 
             for (const entitySet of possibleEntitySets) {
                 try {
@@ -92,12 +91,9 @@ export const useDataflowService = (getAsJson: <T>(url: string, query?: URLSearch
                             continue;
                         }
                     } catch (error: any) {
-                        lastError = error;
                         continue;
                     }
                 } catch (error: any) {
-                    lastError = error;
-                    
                     // If it's a "not found" error, continue to next entity set
                     if (error.message && (
                         error.message.includes('Not Found') ||
@@ -260,7 +256,7 @@ export const useDataflowService = (getAsJson: <T>(url: string, query?: URLSearch
         console.log('Making Power Query API call - backend will handle authentication based on connection configuration');
         
         try {
-            const apiResponse = await postAsJson(proxiedUrl, updateRequest, headers);
+            await postAsJson(proxiedUrl, updateRequest, headers);
             console.log('Dataflow owner updated successfully');
 
         } catch (error: any) {
@@ -291,13 +287,7 @@ export const checkAvailableEntitySets = async (): Promise<any> => {
         }
 
         const data = await response.asJson<any>();
-        
-        // Look for dataflow-related entity sets
-        const dataflowEntitySets = data.value?.filter((entitySet: any) => 
-            entitySet.name?.toLowerCase().includes('dataflow') ||
-            entitySet.name?.toLowerCase().includes('msdyn_dataflow')
-        );
-        
+
         return data;
     } catch (error) {
         console.error('Error checking entity sets:', error);
